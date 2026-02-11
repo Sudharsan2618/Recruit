@@ -39,6 +39,7 @@ import {
   getCourseDetail,
   getEnrollments,
   enrollInCourse,
+  trackActivity,
   type CourseDetail,
   type EnrollmentOut,
 } from "@/lib/api"
@@ -119,6 +120,14 @@ export default function CourseDetailPage() {
       setEnrolling(true)
       const result = await enrollInCourse(course.course_id, user.student_id)
       setEnrollment(result)
+
+      // Track Activity: Course Enrolled
+      trackActivity({
+        student_id: user.student_id,
+        course_id: course.course_id,
+        activity_type: "course_enrolled"
+      }).catch(console.warn)
+
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to enroll")
     } finally {
@@ -138,6 +147,14 @@ export default function CourseDetailPage() {
     try {
       const result = await enrollInCourse(course.course_id, user.student_id)
       setEnrollment(result)
+
+      // Track Activity: Course Enrolled (Paid)
+      trackActivity({
+        student_id: user.student_id,
+        course_id: course.course_id,
+        activity_type: "course_enrolled"
+      }).catch(console.warn)
+
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to enroll after payment")
     }

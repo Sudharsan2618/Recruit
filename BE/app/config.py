@@ -28,6 +28,10 @@ class Settings(BaseSettings):
     GCS_PROJECT_ID: str = "gen-lang-client-0881077280"
     GOOGLE_APPLICATION_CREDENTIALS: Optional[str] = "gen-lang-client-0881077280-8aa1d2a2fbc9.json"
 
+    # ── MongoDB (Learning Analytics & xAPI) ──
+    MONGODB_URL: str = "mongodb+srv://sudharsan2618_db_user:ZdMsUJRvEqeaUsZj@tatti.gjcwmg8.mongodb.net/?appName=Tatti"
+    MONGODB_DB: str = "recruit_lms_db"
+
     # ── Frontend (CORS) ──
     FRONTEND_URL: str = "http://localhost:3000"
 

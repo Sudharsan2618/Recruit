@@ -51,7 +51,9 @@ db.createCollection("learning_progress", {
             "flashcard_interaction",
             "note_taken",
             "resource_downloaded",
-            "page_viewed"
+            "page_viewed",
+            "course_enrolled",
+            "course_completed"
           ],
           description: "Type of learning activity"
         },

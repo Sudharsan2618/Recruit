@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
 from app.api.v1.router import router as v1_router
+from app.db.mongodb import connect_mongodb, close_mongodb, ensure_indexes
 
 
 @asynccontextmanager
@@ -13,7 +14,15 @@ async def lifespan(app: FastAPI):
     """Application startup/shutdown lifecycle."""
     print(f"[START] {settings.APP_NAME} API starting...")
     print(f"[DOCS]  http://localhost:8000/docs")
+
+    # MongoDB connect + indexes
+    await connect_mongodb()
+    await ensure_indexes()
+
     yield
+
+    # Shutdown
+    await close_mongodb()
     print(f"[STOP]  {settings.APP_NAME} API shutting down...")
 
 
@@ -46,3 +55,4 @@ app.include_router(v1_router, prefix=settings.API_V1_PREFIX)
 @app.get("/health")
 async def health_check():
     return {"status": "healthy", "app": settings.APP_NAME}
+

@@ -167,6 +167,115 @@ export interface FlashcardDeckOut {
   flashcards: FlashcardOut[];
 }
 
+// ── Tracking & Analytics Types ──
+
+export interface DeviceInfo {
+  device_type?: "desktop" | "mobile" | "tablet";
+  browser?: string;
+  os?: string;
+  screen_resolution?: string;
+}
+
+export interface VideoProgress {
+  current_time_seconds: number;
+  total_duration_seconds: number;
+  percentage_watched: number;
+  playback_rate?: number;
+  is_completed?: boolean;
+}
+
+export interface QuizResult {
+  quiz_id: number;
+  attempt_id?: number;
+  score: number;
+  percentage: number;
+  passed: boolean;
+  time_taken_seconds: number;
+  answers?: any[];
+}
+
+export interface FlashcardSession {
+  deck_id: number;
+  card_id?: number;
+  mastery_level: number;
+  is_correct?: boolean;
+  response_time_ms?: number;
+}
+
+export interface ActivityDetails {
+  video_progress?: VideoProgress;
+  quiz_result?: QuizResult;
+  flashcard_session?: FlashcardSession;
+  time_spent_seconds?: number;
+  scroll_depth_percentage?: number;
+}
+
+export type ActivityType =
+  | "lesson_started"
+  | "lesson_completed"
+  | "video_watched"
+  | "video_paused"
+  | "video_seeked"
+  | "document_viewed"
+  | "audio_played"
+  | "quiz_started"
+  | "quiz_submitted"
+  | "flashcard_interaction"
+  | "note_taken"
+  | "resource_downloaded"
+  | "page_viewed"
+  | "course_enrolled"
+  | "course_completed";
+
+export interface TrackActivityRequest {
+  student_id: number;
+  course_id: number;
+  module_id?: number;
+  lesson_id?: number;
+  activity_type: ActivityType;
+  session_id?: string;
+  details?: ActivityDetails;
+  device_info?: DeviceInfo;
+}
+
+export interface StartSessionRequest {
+  user_id: number;
+  device_info?: DeviceInfo;
+}
+
+export interface SessionResponse {
+  session_id: string;
+  started_at: string;
+  message: string;
+}
+
+export interface HeartbeatRequest {
+  session_id: string;
+  current_page?: string;
+}
+
+export interface StudentActivitySummary {
+  student_id: number;
+  course_id: number;
+  total_time_spent_seconds: number;
+  lessons_started: number;
+  lessons_completed: number;
+  videos_watched: number;
+  quizzes_taken: number;
+  flashcards_reviewed: number;
+  resources_downloaded: number;
+  last_activity_at: string | null;
+}
+
+export interface CourseEngagementSummary {
+  course_id: number;
+  active_students: number;
+  total_activities: number;
+  avg_time_spent_minutes: number;
+  completion_rate: number;
+  activity_breakdown: Record<string, number>;
+}
+
 // ── API Functions ──
 
 async function fetchApi<T>(path: string): Promise<T> {
@@ -273,6 +382,50 @@ export async function getFlashcardDeck(deckId: number): Promise<FlashcardDeckOut
   return fetchApi<FlashcardDeckOut>(`/courses/flashcards/${deckId}`);
 }
 
+// ── Tracking & Analytics Functions ──
+
+/** Start a tracking session */
+export async function startTrackingSession(req: StartSessionRequest): Promise<SessionResponse> {
+  return fetchApiWithAuth<SessionResponse>("/tracking/sessions/start", {
+    method: "POST",
+    body: req,
+  });
+}
+
+/** Send heartbeat */
+export async function sendHeartbeat(req: HeartbeatRequest): Promise<{ success: boolean }> {
+  return fetchApiWithAuth<{ success: boolean }>("/tracking/sessions/heartbeat", {
+    method: "POST",
+    body: req,
+  });
+}
+
+/** End session */
+export async function endTrackingSession(sessionId: string): Promise<SessionResponse> {
+  return fetchApiWithAuth<SessionResponse>("/tracking/sessions/end", {
+    method: "POST",
+    body: { session_id: sessionId, logout_type: "manual" },
+  });
+}
+
+/** Track a learning activity */
+export async function trackActivity(req: TrackActivityRequest): Promise<{ success: boolean }> {
+  return fetchApiWithAuth<{ success: boolean }>("/tracking/activities", {
+    method: "POST",
+    body: req,
+  });
+}
+
+/** Get student analytics for a course */
+export async function getStudentAnalytics(studentId: number, courseId: number): Promise<StudentActivitySummary> {
+  return fetchApiWithAuth<StudentActivitySummary>(`/tracking/analytics/student/${studentId}/course/${courseId}`);
+}
+
+/** Get course engagement (Admin/Instructor) */
+export async function getCourseAnalytics(courseId: number, periodDays = 30): Promise<CourseEngagementSummary> {
+  return fetchApiWithAuth<CourseEngagementSummary>(`/tracking/analytics/course/${courseId}/engagement?period_days=${periodDays}`);
+}
+
 // ── Enrollment Types & Functions ──
 
 export interface EnrollmentOut {
@@ -300,6 +453,43 @@ export async function enrollInCourse(
   return fetchApiWithAuth<EnrollmentOut>(`/students/enroll/${courseId}`, {
     method: "POST",
     body: { student_id: studentId },
+  });
+}
+
+// ── Lesson Progress Functions ──
+
+export interface ProgressUpdate {
+  lesson_id: number;
+  progress_percentage?: number;
+  time_spent_seconds?: number;
+  video_position_seconds?: number;
+  is_completed?: boolean;
+}
+
+export interface LessonProgressOut {
+  progress_id: number;
+  lesson_id: number;
+  is_completed: boolean;
+  progress_percentage: string;
+  time_spent_seconds: number;
+  video_position_seconds: number;
+  last_accessed_at: string;
+}
+
+/** Get all lesson progress for a student in a course */
+export async function getCourseProgress(studentId: number, courseId: number): Promise<LessonProgressOut[]> {
+  return fetchApiWithAuth<LessonProgressOut[]>(`/students/enrollments/${courseId}/progress?student_id=${studentId}`);
+}
+
+/** Update lesson progress */
+export async function updateLessonProgress(
+  studentId: number, 
+  courseId: number, 
+  progress: ProgressUpdate
+): Promise<LessonProgressOut> {
+  return fetchApiWithAuth<LessonProgressOut>(`/students/enrollments/${courseId}/progress?student_id=${studentId}`, {
+    method: "POST",
+    body: progress,
   });
 }
 

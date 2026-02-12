@@ -10,26 +10,37 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { useAuth } from "@/lib/auth-context"
 
-export default function CompanyLoginPage() {
+export default function CompanyRegisterPage() {
+  const [companyName, setCompanyName] = useState("")
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
+  const [confirmPassword, setConfirmPassword] = useState("")
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
-  const { login } = useAuth()
+  const { registerCompany } = useAuth()
   const router = useRouter()
 
-  async function handleLogin(e: React.FormEvent) {
+  async function handleRegister(e: React.FormEvent) {
     e.preventDefault()
     setError(null)
-    setIsLoading(true)
 
-    const result = await login(email, password)
+    if (password !== confirmPassword) {
+      setError("Passwords do not match")
+      return
+    }
+    if (password.length < 8) {
+      setError("Password must be at least 8 characters")
+      return
+    }
+
+    setIsLoading(true)
+    const result = await registerCompany({ email, password, company_name: companyName })
 
     if (result.success) {
-      router.push("/company")
+      router.push("/company/onboarding")
     } else {
-      setError(result.error || "Login failed")
+      setError(result.error || "Registration failed")
     }
     setIsLoading(false)
   }
@@ -44,17 +55,17 @@ export default function CompanyLoginPage() {
             </div>
             <div>
               <p className="text-sm font-semibold text-muted-foreground">SkillBridge</p>
-              <h1 className="text-2xl font-bold text-foreground">Company Portal</h1>
+              <h1 className="text-2xl font-bold text-foreground">Register Your Company</h1>
             </div>
           </div>
           <p className="text-pretty text-muted-foreground">
-            Post roles, analyze the talent pool, and manage your candidate pipeline in one place.
+            Access a pool of skilled, course-verified candidates. Post jobs and hire top talent matched by our platform.
           </p>
           <div className="grid gap-3 text-sm text-muted-foreground">
             {[
-              "Talent analytics with emerging skill trends",
-              "Streamlined job management workflows",
-              "Kanban pipeline for candidate reviews",
+              "Access pre-screened candidates with verified learning records",
+              "Post jobs and receive admin-curated candidate shortlists",
+              "View talent analytics and skill distribution data",
             ].map((f) => (
               <div key={f} className="flex items-center gap-2">
                 <span className="h-1.5 w-1.5 rounded-full bg-accent" />
@@ -63,29 +74,39 @@ export default function CompanyLoginPage() {
             ))}
           </div>
           <Button variant="outline" asChild className="w-fit bg-transparent">
-            <Link href="/">
-              Back to Home <ArrowRight className="ml-2 h-4 w-4" />
+            <Link href="/company/login">
+              Already registered? Sign In <ArrowRight className="ml-2 h-4 w-4" />
             </Link>
           </Button>
         </div>
 
         <Card className="w-full max-w-md justify-self-center">
           <CardHeader>
-            <CardTitle className="text-xl">Sign in to Company Portal</CardTitle>
-            <CardDescription>Access your hiring dashboard and talent pipeline.</CardDescription>
+            <CardTitle className="text-xl">Create Company Account</CardTitle>
+            <CardDescription>Set up your company profile and start hiring.</CardDescription>
           </CardHeader>
           <CardContent>
-            <form onSubmit={handleLogin} className="flex flex-col gap-4">
+            <form onSubmit={handleRegister} className="flex flex-col gap-4">
               {error && (
                 <div className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive border border-destructive/20">
                   {error}
                 </div>
               )}
               <div className="flex flex-col gap-1.5">
-                <Label>Work Email</Label>
+                <Label>Company Name</Label>
+                <Input
+                  placeholder="e.g. TechCorp Solutions"
+                  value={companyName}
+                  onChange={(e) => setCompanyName(e.target.value)}
+                  required
+                  disabled={isLoading}
+                />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <Label>Business Email</Label>
                 <Input
                   type="email"
-                  placeholder="hiring@techstart.com"
+                  placeholder="hr@company.com"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   required
@@ -97,7 +118,7 @@ export default function CompanyLoginPage() {
                 <div className="relative">
                   <Input
                     type={showPassword ? "text" : "password"}
-                    placeholder="Enter your password"
+                    placeholder="Min. 8 characters"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     required
@@ -113,20 +134,31 @@ export default function CompanyLoginPage() {
                   </button>
                 </div>
               </div>
+              <div className="flex flex-col gap-1.5">
+                <Label>Confirm Password</Label>
+                <Input
+                  type="password"
+                  placeholder="Repeat your password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  required
+                  disabled={isLoading}
+                />
+              </div>
               <Button type="submit" className="w-full" disabled={isLoading}>
                 {isLoading ? (
                   <>
                     <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Signing in...
+                    Creating account...
                   </>
                 ) : (
-                  "Sign In"
+                  "Register Company"
                 )}
               </Button>
               <p className="text-center text-xs text-muted-foreground">
-                Don&apos;t have an account?{" "}
-                <Link href="/company/register" className="text-accent hover:underline">
-                  Register your company
+                Already have an account?{" "}
+                <Link href="/company/login" className="text-accent hover:underline">
+                  Sign in
                 </Link>
               </p>
             </form>

@@ -606,6 +606,252 @@ export async function getResumeAnalysis(studentId: number): Promise<ResumeAnalys
 }
 
 
+// ── Student Profile ──
+
+export interface StudentProfile {
+  user_id: number;
+  email: string;
+  phone: string | null;
+  student_id: number;
+  first_name: string;
+  last_name: string;
+  bio: string | null;
+  headline: string | null;
+  location: string | null;
+  education: string | null;
+  experience_years: number;
+  profile_picture_url: string | null;
+  resume_url: string | null;
+  cover_letter_url: string | null;
+  availability_status: boolean;
+  preferred_job_types: string[];
+  preferred_locations: string[];
+  preferred_remote_types: string[];
+  salary_expectation_min: number | null;
+  salary_expectation_max: number | null;
+  salary_currency: string;
+  notice_period_days: number | null;
+  linkedin_url: string | null;
+  github_url: string | null;
+  portfolio_url: string | null;
+  personal_website: string | null;
+  total_courses_enrolled: number;
+  total_courses_completed: number;
+  total_learning_hours: number;
+  average_quiz_score: number;
+  streak_days: number;
+}
+
+/** Get full student profile (requires auth) */
+export async function getStudentProfile(): Promise<StudentProfile> {
+  return fetchApiWithAuth<StudentProfile>("/auth/profile/student");
+}
+
+/** Update student profile (requires auth) */
+export async function updateStudentProfile(data: Partial<StudentProfile>): Promise<StudentProfile> {
+  const token = typeof window !== "undefined" ? localStorage.getItem("auth_token") : null;
+  const res = await fetch(`${API_BASE}/auth/profile/student`, {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: "Failed to update profile" }));
+    throw new Error(err.detail || "Failed to update profile");
+  }
+  return res.json();
+}
+
+
+// ── Company Profile ──
+
+export interface CompanyProfile {
+  user_id: number;
+  email: string;
+  phone: string | null;
+  company_id: number;
+  company_name: string;
+  description: string | null;
+  industry: string | null;
+  company_size: string | null;
+  founded_year: number | null;
+  headquarters_location: string | null;
+  logo_url: string | null;
+  banner_url: string | null;
+  website_url: string | null;
+  contact_email: string | null;
+  contact_phone: string | null;
+  linkedin_url: string | null;
+  twitter_url: string | null;
+  is_verified: boolean;
+  billing_email: string | null;
+  gst_number: string | null;
+  billing_address: string | null;
+  total_jobs_posted: number;
+  total_hires: number;
+}
+
+/** Get full company profile (requires auth) */
+export async function getCompanyProfile(): Promise<CompanyProfile> {
+  return fetchApiWithAuth<CompanyProfile>("/auth/profile/company");
+}
+
+/** Update company profile (requires auth) */
+export async function updateCompanyProfile(data: Partial<CompanyProfile>): Promise<CompanyProfile> {
+  const token = typeof window !== "undefined" ? localStorage.getItem("auth_token") : null;
+  const res = await fetch(`${API_BASE}/auth/profile/company`, {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: "Failed to update profile" }));
+    throw new Error(err.detail || "Failed to update profile");
+  }
+  return res.json();
+}
+
+
+// ── Company Jobs ──
+
+export interface JobSkillInput {
+  name: string;
+  is_mandatory: boolean;
+  min_experience_years?: number | null;
+}
+
+export interface JobCreatePayload {
+  title: string;
+  description: string;
+  responsibilities?: string;
+  requirements?: string;
+  nice_to_have?: string;
+  department?: string;
+  employment_type: string;
+  remote_type: string;
+  location?: string;
+  experience_min_years: number;
+  experience_max_years?: number | null;
+  salary_min?: number | null;
+  salary_max?: number | null;
+  salary_currency: string;
+  salary_is_visible: boolean;
+  benefits: string[];
+  skills: JobSkillInput[];
+  status: string;
+  deadline?: string | null;
+}
+
+export interface JobSkillOut {
+  skill_id: number;
+  name: string;
+  is_mandatory: boolean;
+  min_experience_years?: number | null;
+}
+
+export interface JobOut {
+  job_id: number;
+  company_id: number;
+  title: string;
+  slug: string;
+  description: string;
+  responsibilities?: string | null;
+  requirements?: string | null;
+  nice_to_have?: string | null;
+  department?: string | null;
+  employment_type: string;
+  remote_type: string;
+  location?: string | null;
+  experience_min_years: number;
+  experience_max_years?: number | null;
+  salary_min?: number | null;
+  salary_max?: number | null;
+  salary_currency: string;
+  salary_is_visible: boolean;
+  benefits: string[];
+  status: string;
+  posted_at?: string | null;
+  deadline?: string | null;
+  views_count: number;
+  applications_count: number;
+  skills: JobSkillOut[];
+  embedding_status?: string | null;
+  created_at?: string | null;
+}
+
+/** Create a new job posting (company, requires auth) */
+export async function createCompanyJob(data: JobCreatePayload): Promise<JobOut> {
+  const token = typeof window !== "undefined" ? localStorage.getItem("auth_token") : null;
+  const res = await fetch(`${API_BASE}/jobs/company`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: "Failed to create job" }));
+    throw new Error(err.detail || "Failed to create job");
+  }
+  return res.json();
+}
+
+/** List all jobs for the authenticated company */
+export async function getCompanyJobs(): Promise<JobOut[]> {
+  return fetchApiWithAuth<JobOut[]>("/jobs/company");
+}
+
+
+// ── Student Dashboard ──
+
+export interface DashboardStats {
+  enrolled_courses: number;
+  completed_courses: number;
+  total_learning_hours: number;
+  average_quiz_score: number;
+  streak_days: number;
+}
+
+export interface EnrolledCourseSummary {
+  course_id: number;
+  title: string;
+  slug: string;
+  thumbnail_url: string | null;
+  progress_percentage: number;
+  total_lessons: number;
+  completed_lessons: number;
+  last_accessed_at: string | null;
+}
+
+export interface RecentActivityItem {
+  activity_type: string;
+  description: string;
+  course_name: string | null;
+  timestamp: string;
+}
+
+export interface StudentDashboardData {
+  first_name: string;
+  last_name: string;
+  stats: DashboardStats;
+  enrolled_courses: EnrolledCourseSummary[];
+  recent_activity: RecentActivityItem[];
+  learning_hours_by_month: { month: string; hours: number }[];
+}
+
+/** Get student dashboard data (requires auth) */
+export async function getStudentDashboard(): Promise<StudentDashboardData> {
+  return fetchApiWithAuth<StudentDashboardData>("/auth/dashboard/student");
+}
+
+
 // ── Notifications ──
 
 export interface Notification {

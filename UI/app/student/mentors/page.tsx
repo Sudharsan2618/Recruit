@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -20,6 +20,7 @@ import {
   MessageSquare,
 } from "lucide-react"
 import { mentors, mentorSessions } from "@/lib/mock-data"
+import { MentorsSkeleton } from "@/components/skeletons"
 
 const statusColors: Record<string, string> = {
   scheduled: "bg-primary/10 text-primary",
@@ -32,6 +33,14 @@ const statusColors: Record<string, string> = {
 export default function MentorsPage() {
   const [search, setSearch] = useState("")
   const [priceFilter, setPriceFilter] = useState("All")
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    const t = setTimeout(() => setLoading(false), 400)
+    return () => clearTimeout(t)
+  }, [])
+
+  if (loading) return <MentorsSkeleton />
 
   const filtered = mentors.filter((m) => {
     if (!m.isActive) return false

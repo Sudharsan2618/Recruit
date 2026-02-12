@@ -6,9 +6,10 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Search, Download, FileText, FileArchive, Palette, Loader2 } from "lucide-react"
+import { Search, Download, FileText, FileArchive, Palette } from "lucide-react"
 import { useState, useEffect } from "react"
 import { getAllMaterials, mapMaterialToUI } from "@/lib/api"
+import { MaterialsSkeleton } from "@/components/skeletons"
 
 const typeIcons: Record<string, React.ElementType> = {
   PDF: FileText,
@@ -57,12 +58,7 @@ export default function MaterialsLibrary() {
         <Input placeholder="Search materials..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-10" />
       </div>
 
-      {loading && (
-        <div className="flex flex-col items-center justify-center py-16">
-          <Loader2 className="h-8 w-8 animate-spin text-primary" />
-          <p className="mt-3 text-sm text-muted-foreground">Loading materials...</p>
-        </div>
-      )}
+      {loading && <MaterialsSkeleton />}
 
       {error && (
         <div className="flex flex-col items-center justify-center py-16 text-center">

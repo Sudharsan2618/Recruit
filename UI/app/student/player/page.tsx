@@ -50,6 +50,7 @@ import {
 } from "@/lib/api"
 import { useAuth } from "@/lib/auth-context"
 import { cn } from "@/lib/utils"
+import { PlayerSkeleton } from "@/components/skeletons"
 
 const contentTypeIcons: Record<string, React.ElementType> = {
   video: Video,
@@ -517,14 +518,7 @@ export default function CoursePlayer() {
   }
 
   if (loading) {
-    return (
-      <div className="flex h-screen items-center justify-center bg-background">
-        <div className="flex flex-col items-center gap-3">
-          <Loader2 className="h-8 w-8 animate-spin text-primary" />
-          <p className="text-sm text-muted-foreground">Loading course...</p>
-        </div>
-      </div>
-    )
+    return <PlayerSkeleton />
   }
 
   if (error || !course) {

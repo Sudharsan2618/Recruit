@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -8,11 +8,20 @@ import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Search, MapPin, DollarSign, Briefcase, Clock } from "lucide-react"
 import { studentJobs } from "@/lib/mock-data"
+import { JobBoardSkeleton } from "@/components/skeletons"
 
 export default function JobBoard() {
   const [search, setSearch] = useState("")
   const [typeFilter, setTypeFilter] = useState("All")
   const [locationFilter, setLocationFilter] = useState("All")
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    const t = setTimeout(() => setLoading(false), 400)
+    return () => clearTimeout(t)
+  }, [])
+
+  if (loading) return <JobBoardSkeleton />
 
   const filtered = studentJobs.filter((j) => {
     if (search && !j.title.toLowerCase().includes(search.toLowerCase()) && !j.company.toLowerCase().includes(search.toLowerCase())) return false

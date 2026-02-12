@@ -7,10 +7,11 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Progress } from "@/components/ui/progress"
-import { Search, Star, Users, Clock, Loader2, CheckCircle2 } from "lucide-react"
+import { Search, Star, Users, Clock, CheckCircle2 } from "lucide-react"
 import Link from "next/link"
 import { getCourses, getCategories, getEnrollments, mapCourseToUI, logSearch, type Category, type EnrollmentOut } from "@/lib/api"
 import { useAuth } from "@/lib/auth-context"
+import { CourseCatalogSkeleton } from "@/components/skeletons"
 
 
 export default function CourseCatalog() {
@@ -121,12 +122,7 @@ export default function CourseCatalog() {
       </div>
 
       {/* Loading */}
-      {loading && (
-        <div className="flex flex-col items-center justify-center py-16">
-          <Loader2 className="h-8 w-8 animate-spin text-primary" />
-          <p className="mt-3 text-sm text-muted-foreground">Loading courses...</p>
-        </div>
-      )}
+      {loading && <CourseCatalogSkeleton />}
 
       {/* Error */}
       {error && (

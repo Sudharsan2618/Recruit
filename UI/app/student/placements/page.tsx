@@ -1,5 +1,6 @@
 "use client"
 
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -17,8 +18,18 @@ import {
   TrendingUp,
 } from "lucide-react"
 import { placementPackages, studentPlacementStatus } from "@/lib/mock-data"
+import { PlacementsSkeleton } from "@/components/skeletons"
 
 export default function PlacementPage() {
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    const t = setTimeout(() => setLoading(false), 400)
+    return () => clearTimeout(t)
+  }, [])
+
+  if (loading) return <PlacementsSkeleton />
+
   const status = studentPlacementStatus
 
   return (

@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -22,6 +22,7 @@ import {
   ArrowRight,
 } from "lucide-react"
 import { referralContacts, referralStats } from "@/lib/mock-data"
+import { ReferralsSkeleton } from "@/components/skeletons"
 
 const statusColors: Record<string, string> = {
   pending: "bg-muted text-muted-foreground",
@@ -42,6 +43,14 @@ const statusLabels: Record<string, string> = {
 export default function ReferralsPage() {
   const [referralLink] = useState("https://recruitlms.com/ref/ALEX2026")
   const [copied, setCopied] = useState(false)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    const t = setTimeout(() => setLoading(false), 400)
+    return () => clearTimeout(t)
+  }, [])
+
+  if (loading) return <ReferralsSkeleton />
 
   const handleCopy = () => {
     navigator.clipboard.writeText(referralLink)

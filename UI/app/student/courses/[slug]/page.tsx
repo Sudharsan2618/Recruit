@@ -44,6 +44,7 @@ import {
   type EnrollmentOut,
 } from "@/lib/api"
 import { useAuth } from "@/lib/auth-context"
+import { CourseDetailSkeleton } from "@/components/skeletons"
 
 const contentTypeIcons: Record<string, React.ElementType> = {
   video: Video,
@@ -167,12 +168,7 @@ export default function CourseDetailPage() {
   }
 
   if (loading) {
-    return (
-      <div className="flex flex-col items-center justify-center py-20">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-        <p className="mt-3 text-sm text-muted-foreground">Loading course...</p>
-      </div>
-    )
+    return <CourseDetailSkeleton />
   }
 
   if (error || !course) {

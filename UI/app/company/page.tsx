@@ -1,12 +1,19 @@
 "use client"
 
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Users, Briefcase, FileText, UserCheck } from "lucide-react"
 import { companyDashboard } from "@/lib/mock-data"
 import { Bar, BarChart, ResponsiveContainer, XAxis, YAxis, Tooltip, Cell } from "recharts"
+import { CompanyDashboardSkeleton } from "@/components/skeletons"
 
 export default function CompanyDashboard() {
+  const [loading, setLoading] = useState(true)
   const d = companyDashboard
+
+  useEffect(() => { setLoading(false) }, [])
+
+  if (loading) return <CompanyDashboardSkeleton />
 
   return (
     <div className="flex flex-col gap-6">

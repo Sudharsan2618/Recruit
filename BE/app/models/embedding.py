@@ -19,14 +19,22 @@ except ImportError:
     from sqlalchemy.types import UserDefinedType
 
     class Vector(UserDefinedType):
+        cache_ok = True
+
         def __init__(self, dim: int = 1536):
             self.dim = dim
 
         def get_col_spec(self):
             return f"vector({self.dim})"
 
-        def bind_expression(self, bindvalue):
-            return bindvalue
+        def bind_processor(self, dialect):
+            def process(value):
+                if value is None:
+                    return None
+                if isinstance(value, list):
+                    return "[" + ",".join(str(v) for v in value) + "]"
+                return value
+            return process
 
         def result_processor(self, dialect, coltype):
             def process(value):
@@ -50,7 +58,7 @@ class StudentEmbedding(Base):
     )
     embedding = Column(Vector(EMBEDDING_DIM), nullable=False)
     embedding_model: Mapped[str] = mapped_column(
-        String(100), default="text-embedding-3-small"
+        String(100), default="gemini-embedding-001"
     )
     source_text_hash: Mapped[Optional[str]] = mapped_column(String(64))
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
@@ -69,7 +77,7 @@ class JobEmbedding(Base):
     )
     embedding = Column(Vector(EMBEDDING_DIM), nullable=False)
     embedding_model: Mapped[str] = mapped_column(
-        String(100), default="text-embedding-3-small"
+        String(100), default="gemini-embedding-001"
     )
     source_text_hash: Mapped[Optional[str]] = mapped_column(String(64))
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)

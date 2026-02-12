@@ -1,14 +1,21 @@
 "use client"
 
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import { Users, TrendingUp, BookOpen, Award } from "lucide-react"
 import { talentPoolAnalytics } from "@/lib/mock-data"
 import { Bar, BarChart, Line, LineChart, ResponsiveContainer, XAxis, YAxis, Tooltip } from "recharts"
+import { CompanyTalentSkeleton } from "@/components/skeletons"
 
 export default function TalentAnalytics() {
+  const [loading, setLoading] = useState(true)
   const d = talentPoolAnalytics
+
+  useEffect(() => { setLoading(false) }, [])
+
+  if (loading) return <CompanyTalentSkeleton />
 
   return (
     <div className="flex flex-col gap-6">

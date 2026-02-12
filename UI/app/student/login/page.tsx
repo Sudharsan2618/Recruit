@@ -133,6 +133,12 @@ export default function StudentLoginPage() {
                   "Sign In"
                 )}
               </Button>
+              <p className="text-center text-xs text-muted-foreground">
+                Don&apos;t have an account?{" "}
+                <Link href="/student/register" className="text-primary hover:underline">
+                  Create one
+                </Link>
+              </p>
             </form>
           </CardContent>
         </Card>

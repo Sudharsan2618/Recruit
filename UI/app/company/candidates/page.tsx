@@ -1,11 +1,12 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { companyCandidates } from "@/lib/mock-data"
 import { GripVertical, User, ChevronRight } from "lucide-react"
+import { CompanyCandidatesSkeleton } from "@/components/skeletons"
 
 const stages = [
   { id: "new", label: "New Candidates", color: "bg-primary/10 text-primary" },
@@ -16,6 +17,11 @@ const stages = [
 
 export default function CandidatePipeline() {
   const [candidates, setCandidates] = useState(companyCandidates)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => { setLoading(false) }, [])
+
+  if (loading) return <CompanyCandidatesSkeleton />
 
   function moveCandidateForward(id: number) {
     setCandidates(prev => prev.map(c => {

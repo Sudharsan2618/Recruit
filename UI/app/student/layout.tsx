@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation"
 
 import { AuthProvider, useAuth } from "@/lib/auth-context"
 import { PortalShell } from "@/components/portal-shell"
+import { DashboardSkeleton } from "@/components/skeletons"
 import {
   LayoutDashboard,
   BookOpen,
@@ -29,23 +30,22 @@ const studentNav = [
   { label: "My Profile", href: "/student/profile", icon: User },
 ]
 
+const UNGUARDED_PATHS = ["/student/login", "/student/register", "/student/onboarding"]
+
 function AuthGuard({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const router = useRouter()
-  const { isAuthenticated, loading } = useAuth()
+  const { isAuthenticated, loading, user } = useAuth()
 
-  // Don't guard login page
-  if (pathname === "/student/login") return <>{children}</>
+  // Don't guard login, register, or onboarding pages
+  if (UNGUARDED_PATHS.includes(pathname)) return <>{children}</>
 
   // Show loading while restoring session
   if (loading) {
     return (
-      <div className="flex h-screen items-center justify-center">
-        <div className="flex flex-col items-center gap-3">
-          <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-          <p className="text-sm text-muted-foreground">Loading...</p>
-        </div>
-      </div>
+      <PortalShell portalName="Student Portal" navItems={studentNav} portalColor="bg-primary">
+        <DashboardSkeleton />
+      </PortalShell>
     )
   }
 
@@ -55,19 +55,20 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
     return null
   }
 
+  // Redirect to onboarding if not completed
+  if (user && !user.onboarding_completed) {
+    router.push("/student/onboarding")
+    return null
+  }
+
   return <>{children}</>
 }
 
 function LayoutContent({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
 
-  // Login page — no shell
-  if (pathname === "/student/login") {
-    return <>{children}</>
-  }
-
-  // Immersive player — no sidebar (Option B)
-  if (pathname === "/student/player") {
+  // Full-screen pages — no shell
+  if (UNGUARDED_PATHS.includes(pathname) || pathname === "/student/player") {
     return <>{children}</>
   }
 

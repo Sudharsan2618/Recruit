@@ -1,54 +1,57 @@
-"""Embedding service — generates text embeddings via Gemini and stores in PostgreSQL pgvector."""
+"""Embedding service — generates text embeddings via Gemini REST API and stores in PostgreSQL pgvector."""
 
 import hashlib
-from datetime import datetime, timezone
+import logging
+import requests
+from datetime import datetime
 from typing import Optional
 
 from app.config import settings
 from app.db.mongodb import get_mongodb
 
+logger = logging.getLogger(__name__)
 
-# ── Lazy-init Gemini client ────────────────────────────────────────────────
+# ── Config ─────────────────────────────────────────────────────────────────
 
-_genai_client = None
-EMBEDDING_MODEL = "models/text-embedding-004"
+EMBEDDING_MODEL = "gemini-embedding-001"
 EMBEDDING_DIM = 1536
-
-
-def _get_genai():
-    """Lazy-init the google.generativeai client."""
-    global _genai_client
-    if _genai_client is not None:
-        return _genai_client
-
-    import google.generativeai as genai
-    genai.configure(api_key=settings.GEMINI_API_KEY)
-    _genai_client = genai
-    return _genai_client
+GEMINI_EMBED_URL = f"https://generativelanguage.googleapis.com/v1beta/models/{EMBEDDING_MODEL}:embedContent"
 
 
 # ── Core embedding function ───────────────────────────────────────────────
 
-def generate_embedding(text: str) -> list[float]:
+def generate_embedding(text: str, task_type: str = "RETRIEVAL_DOCUMENT") -> list[float]:
     """
-    Generate a 1536-dimension embedding for the given text using Gemini.
+    Generate a 1536-dimension embedding for the given text using Gemini REST API.
 
     Args:
         text: Input text to embed (will be truncated to 8000 chars)
+        task_type: Gemini task type (RETRIEVAL_DOCUMENT, RETRIEVAL_QUERY, etc.)
 
     Returns:
         List of 1536 floats representing the text embedding
     """
-    genai = _get_genai()
     text = text[:8000]
 
-    result = genai.embed_content(
-        model=EMBEDDING_MODEL,
-        content=text,
-        task_type="RETRIEVAL_DOCUMENT",
-        output_dimensionality=EMBEDDING_DIM,
+    payload = {
+        "model": f"models/{EMBEDDING_MODEL}",
+        "content": {"parts": [{"text": text}]},
+        "taskType": task_type,
+        "output_dimensionality": EMBEDDING_DIM,
+    }
+
+    resp = requests.post(
+        GEMINI_EMBED_URL,
+        headers={
+            "Content-Type": "application/json",
+            "x-goog-api-key": settings.GEMINI_API_KEY,
+        },
+        json=payload,
+        timeout=30,
     )
-    return result["embedding"]
+    resp.raise_for_status()
+    data = resp.json()
+    return data["embedding"]["values"]
 
 
 def text_hash(text: str) -> str:
@@ -160,17 +163,17 @@ async def generate_student_embedding(student_id: int) -> Optional[dict]:
         )
         row = existing.scalar_one_or_none()
 
-        now = datetime.now(timezone.utc)
+        now = datetime.utcnow()
         if row:
             row.embedding = vector
             row.source_text_hash = current_hash
-            row.embedding_model = "text-embedding-004"
+            row.embedding_model = "gemini-embedding-001"
             row.updated_at = now
         else:
             row = StudentEmbedding(
                 student_id=student_id,
                 embedding=vector,
-                embedding_model="text-embedding-004",
+                embedding_model="gemini-embedding-001",
                 source_text_hash=current_hash,
                 created_at=now,
                 updated_at=now,

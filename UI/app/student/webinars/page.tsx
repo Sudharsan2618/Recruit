@@ -1,12 +1,23 @@
 "use client"
 
+import { useState, useEffect } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Calendar, Clock, Users, Video } from "lucide-react"
 import { webinars } from "@/lib/mock-data"
+import { WebinarsSkeleton } from "@/components/skeletons"
 
 export default function WebinarsPage() {
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    const t = setTimeout(() => setLoading(false), 400)
+    return () => clearTimeout(t)
+  }, [])
+
+  if (loading) return <WebinarsSkeleton />
+
   const upcoming = webinars.filter(w => w.status === "upcoming")
   const completed = webinars.filter(w => w.status === "completed")
 

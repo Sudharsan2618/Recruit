@@ -10,11 +10,28 @@ export interface AuthUser {
   email: string
   user_type: string
   status: string
+  onboarding_completed: boolean
   student_id: number | null
   first_name: string | null
   last_name: string | null
   headline: string | null
   profile_picture_url: string | null
+  company_id: number | null
+  company_name: string | null
+  logo_url: string | null
+}
+
+interface RegisterStudentData {
+  email: string
+  password: string
+  first_name: string
+  last_name: string
+}
+
+interface RegisterCompanyData {
+  email: string
+  password: string
+  company_name: string
 }
 
 interface AuthContextType {
@@ -22,6 +39,9 @@ interface AuthContextType {
   token: string | null
   loading: boolean
   login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>
+  registerStudent: (data: RegisterStudentData) => Promise<{ success: boolean; error?: string }>
+  registerCompany: (data: RegisterCompanyData) => Promise<{ success: boolean; error?: string }>
+  updateUser: (user: AuthUser) => void
   logout: () => void
   isAuthenticated: boolean
 }
@@ -31,6 +51,9 @@ const AuthContext = createContext<AuthContextType>({
   token: null,
   loading: true,
   login: async () => ({ success: false }),
+  registerStudent: async () => ({ success: false }),
+  registerCompany: async () => ({ success: false }),
+  updateUser: () => {},
   logout: () => {},
   isAuthenticated: false,
 })
@@ -61,6 +84,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setLoading(false)
   }, [])
 
+  const _saveSession = useCallback((accessToken: string, userData: AuthUser) => {
+    setToken(accessToken)
+    setUser(userData)
+    localStorage.setItem("auth_token", accessToken)
+    localStorage.setItem("auth_user", JSON.stringify(userData))
+  }, [])
+
   const login = useCallback(async (email: string, password: string) => {
     try {
       const res = await fetch(`${API_BASE}/auth/login`, {
@@ -75,23 +105,72 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       const data = await res.json()
-      setToken(data.access_token)
-      setUser(data.user)
-      localStorage.setItem("auth_token", data.access_token)
-      localStorage.setItem("auth_user", JSON.stringify(data.user))
+      _saveSession(data.access_token, data.user)
       return { success: true }
     } catch (err) {
       return { success: false, error: "Network error. Please try again." }
     }
+  }, [_saveSession])
+
+  const registerStudent = useCallback(async (regData: RegisterStudentData) => {
+    try {
+      const res = await fetch(`${API_BASE}/auth/register/student`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(regData),
+      })
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ detail: "Registration failed" }))
+        return { success: false, error: err.detail || "Registration failed" }
+      }
+
+      const data = await res.json()
+      _saveSession(data.access_token, data.user)
+      return { success: true }
+    } catch (err) {
+      return { success: false, error: "Network error. Please try again." }
+    }
+  }, [_saveSession])
+
+  const registerCompany = useCallback(async (regData: RegisterCompanyData) => {
+    try {
+      const res = await fetch(`${API_BASE}/auth/register/company`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(regData),
+      })
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ detail: "Registration failed" }))
+        return { success: false, error: err.detail || "Registration failed" }
+      }
+
+      const data = await res.json()
+      _saveSession(data.access_token, data.user)
+      return { success: true }
+    } catch (err) {
+      return { success: false, error: "Network error. Please try again." }
+    }
+  }, [_saveSession])
+
+  const updateUser = useCallback((updatedUser: AuthUser) => {
+    setUser(updatedUser)
+    localStorage.setItem("auth_user", JSON.stringify(updatedUser))
   }, [])
 
   const logout = useCallback(() => {
+    const userType = user?.user_type
     setToken(null)
     setUser(null)
     localStorage.removeItem("auth_token")
     localStorage.removeItem("auth_user")
-    router.push("/student/login")
-  }, [router])
+    if (userType === "company") {
+      router.push("/company/login")
+    } else {
+      router.push("/student/login")
+    }
+  }, [router, user?.user_type])
 
   return (
     <AuthContext.Provider
@@ -100,6 +179,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         token,
         loading,
         login,
+        registerStudent,
+        registerCompany,
+        updateUser,
         logout,
         isAuthenticated: !!token && !!user,
       }}

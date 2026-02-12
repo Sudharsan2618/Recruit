@@ -78,6 +78,19 @@ class TrackingService:
         except Exception:
             pass  # Non-critical — engagement is pre-computed nightly anyway
 
+        # 4. Best-effort flashcard progress (SM-2 spaced repetition)
+        try:
+            if event.activity_type == ActivityType.FLASHCARD_INTERACTION:
+                await self._update_flashcard_progress(event, now)
+        except Exception:
+            pass
+
+        # 5. Best-effort notification triggers
+        try:
+            await self._trigger_notifications(event)
+        except Exception:
+            pass
+
         return TrackActivityResponse(
             success=True,
             activity_id=activity_id,
@@ -434,3 +447,115 @@ class TrackingService:
             update,
             upsert=True,
         )
+
+    # ──────────────────────────────────────────────────────────────────
+    # Flashcard Progress (SM-2 Spaced Repetition)
+    # ──────────────────────────────────────────────────────────────────
+
+    async def _update_flashcard_progress(
+        self,
+        event: TrackActivityRequest,
+        timestamp: datetime,
+    ) -> None:
+        """Update flashcard_progress using SM-2 spaced repetition."""
+        details = event.details
+        if not details or not details.flashcard_session:
+            return
+
+        fc = details.flashcard_session
+        is_correct = fc.is_correct if fc.is_correct is not None else False
+        card_id = fc.card_id if hasattr(fc, 'card_id') and fc.card_id else 0
+        deck_id = fc.deck_id if hasattr(fc, 'deck_id') and fc.deck_id else 0
+
+        # Fetch existing progress
+        existing = await self.db["flashcard_progress"].find_one({
+            "student_id": event.student_id,
+            "card_id": card_id,
+        })
+
+        if existing:
+            mastery = existing.get("mastery_level", 0)
+            correct_count = existing.get("correct_count", 0)
+            incorrect_count = existing.get("incorrect_count", 0)
+        else:
+            mastery = 0
+            correct_count = 0
+            incorrect_count = 0
+
+        # SM-2 update
+        if is_correct:
+            correct_count += 1
+            mastery = min(mastery + 1, 5)  # Cap at 5
+        else:
+            incorrect_count += 1
+            mastery = max(mastery - 1, 0)
+
+        # Compute next review interval based on mastery level
+        intervals = [1, 1, 3, 7, 14, 30]  # days
+        interval_days = intervals[mastery] if mastery < len(intervals) else 30
+        next_review = timestamp + timedelta(days=interval_days)
+
+        # Review history entry
+        review_entry = {
+            "is_correct": is_correct,
+            "at": timestamp,
+        }
+
+        await self.db["flashcard_progress"].update_one(
+            {"student_id": event.student_id, "card_id": card_id},
+            {
+                "$set": {
+                    "deck_id": deck_id,
+                    "mastery_level": mastery,
+                    "correct_count": correct_count,
+                    "incorrect_count": incorrect_count,
+                    "last_reviewed_at": timestamp,
+                    "next_review_at": next_review,
+                },
+                "$push": {"review_history": review_entry},
+                "$setOnInsert": {
+                    "student_id": event.student_id,
+                    "card_id": card_id,
+                    "created_at": timestamp,
+                },
+            },
+            upsert=True,
+        )
+
+    # ──────────────────────────────────────────────────────────────────
+    # Notification Triggers
+    # ──────────────────────────────────────────────────────────────────
+
+    async def _trigger_notifications(
+        self,
+        event: TrackActivityRequest,
+    ) -> None:
+        """Create notification queue entries for important activities."""
+        from app.services.notification_service import create_notification
+
+        if event.activity_type == ActivityType.COURSE_COMPLETED:
+            await create_notification(
+                user_id=event.student_id,
+                notification_type="course_completed",
+                title="🎉 Course Completed!",
+                body="Congratulations! You've completed a course. Keep up the great work!",
+                metadata={"course_id": event.course_id},
+            )
+        elif event.activity_type == ActivityType.QUIZ_SUBMITTED:
+            score = None
+            passed = None
+            if event.details and event.details.quiz_result:
+                score = event.details.quiz_result.score
+                passed = event.details.quiz_result.passed
+            if passed:
+                await create_notification(
+                    user_id=event.student_id,
+                    notification_type="quiz_passed",
+                    title="✅ Quiz Passed!",
+                    body=f"Great job! You scored {score}% on the quiz.",
+                    metadata={
+                        "course_id": event.course_id,
+                        "lesson_id": event.lesson_id,
+                        "score": score,
+                    },
+                )

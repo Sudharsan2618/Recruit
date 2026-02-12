@@ -2,6 +2,9 @@
 
 from pydantic_settings import BaseSettings
 from typing import Optional
+from dotenv import load_dotenv
+import os
+load_dotenv()
 
 
 class Settings(BaseSettings):
@@ -17,23 +20,24 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
 
     # ── PostgreSQL ──
-    POSTGRES_HOST: str = "dpg-ctlpcvrqf0us7389o680-a.singapore-postgres.render.com"
-    POSTGRES_PORT: int = 5432
-    POSTGRES_USER: str = "admin"
-    POSTGRES_PASSWORD: str = "kbOZpYYBZLfoeQRlBFajBfxi8A2JwPwk"
-    POSTGRES_DB: str = "Recruit"
+    POSTGRES_HOST: str = os.getenv("POSTGRES_HOST")
+    POSTGRES_PORT: int = os.getenv("POSTGRES_PORT")
+    POSTGRES_USER: str = os.getenv("POSTGRES_USER")
+    POSTGRES_PASSWORD: str = os.getenv("POSTGRES_PASSWORD")
+    POSTGRES_DB: str = os.getenv("POSTGRES_DB")
 
     # ── GCP Cloud Storage ──
-    GCS_BUCKET_NAME: str = "recruitlms-assets"
-    GCS_PROJECT_ID: str = "gen-lang-client-0881077280"
-    GOOGLE_APPLICATION_CREDENTIALS: Optional[str] = "gen-lang-client-0881077280-8aa1d2a2fbc9.json"
-
+    GCS_BUCKET_NAME: str = os.getenv("GCS_BUCKET_NAME")
+    GCS_PROJECT_ID: str = os.getenv("GCS_PROJECT_ID")
+    GOOGLE_APPLICATION_CREDENTIALS: Optional[str] = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
+    GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY")
+    GEMINI_MODEL: str = os.getenv("GEMINI_MODEL")
     # ── MongoDB (Learning Analytics & xAPI) ──
-    MONGODB_URL: str = "mongodb+srv://sudharsan2618_db_user:ZdMsUJRvEqeaUsZj@tatti.gjcwmg8.mongodb.net/?appName=Tatti"
-    MONGODB_DB: str = "recruit_lms_db"
+    MONGODB_URL: str = os.getenv("MONGODB_URL")
+    MONGODB_DB: str = os.getenv("MONGODB_DB")
 
     # ── Frontend (CORS) ──
-    FRONTEND_URL: str = "http://localhost:3000"
+    FRONTEND_URL: str = os.getenv("FRONTEND_URL")
 
     @property
     def DATABASE_URL(self) -> str:

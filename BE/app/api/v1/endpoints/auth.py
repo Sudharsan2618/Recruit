@@ -34,6 +34,13 @@ async def login(body: LoginRequest, service: AuthService = Depends(get_service))
         }
     )
 
+    # Fire-and-forget event log
+    try:
+        from app.services.event_logger import log_event
+        await log_event("user.login", user_id=user_data["user_id"])
+    except Exception:
+        pass  # Non-critical
+
     return TokenResponse(
         access_token=token,
         user=UserOut(**user_data),

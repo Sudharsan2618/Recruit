@@ -248,3 +248,193 @@ async def get_recent_activities(
         return {"activities": activities, "count": len(activities)}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Activity query failed: {e}")
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# 5.  SEARCH LOGGING
+# ══════════════════════════════════════════════════════════════════════════
+
+from pydantic import BaseModel, Field
+
+
+class SearchLogRequest(BaseModel):
+    student_id: int
+    query: str
+    search_type: str = "course"  # course, lesson, general
+    results_count: int = 0
+
+
+@router.post(
+    "/search",
+    summary="Log a search query",
+    description="Records a student's search query for analytics and recommendation improvement.",
+)
+async def log_search(body: SearchLogRequest):
+    try:
+        db = get_mongodb()
+        doc = {
+            "student_id": body.student_id,
+            "query": body.query,
+            "search_type": body.search_type,
+            "results_count": body.results_count,
+            "timestamp": datetime.now(),
+        }
+        await db["search_logs"].insert_one(doc)
+        return {"success": True, "message": "Search logged"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Search log failed: {e}")
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# 6.  RESUME ANALYSIS
+# ══════════════════════════════════════════════════════════════════════════
+
+from fastapi import UploadFile, File as FastAPIFile
+
+
+@router.post(
+    "/resume/upload",
+    summary="Upload and analyze a resume",
+    description="Accepts a PDF resume, uploads to GCS, extracts text, runs AI analysis via Gemini, stores in resume_analysis.",
+)
+async def upload_resume(
+    student_id: int = Query(..., description="Student ID"),
+    file: UploadFile = FastAPIFile(..., description="PDF resume file"),
+):
+    try:
+        if not file.filename or not file.filename.lower().endswith(".pdf"):
+            raise HTTPException(status_code=400, detail="Only PDF files are supported")
+
+        if file.size and file.size > 5 * 1024 * 1024:  # 5MB limit
+            raise HTTPException(status_code=400, detail="File too large (max 5MB)")
+
+        file_bytes = await file.read()
+
+        if len(file_bytes) == 0:
+            raise HTTPException(status_code=400, detail="Empty file")
+
+        # 1. Upload to GCS (delete old resumes first)
+        try:
+            from app.services.storage_service import upload_resume as gcs_upload
+            file_url = gcs_upload(
+                student_id=student_id,
+                file_bytes=file_bytes,
+                original_filename=file.filename,
+            )
+        except Exception as gcs_err:
+            # GCS failed — use placeholder URL so analysis still works
+            import logging
+            logging.getLogger(__name__).warning(f"GCS upload failed: {gcs_err}")
+            file_url = f"uploads/resumes/student_{student_id}_{file.filename}"
+
+        # 2. Update students.resume_url in PostgreSQL
+        try:
+            from app.db.postgres import async_session_factory
+            from app.models.user import Student
+            async with async_session_factory() as session:
+                student = await session.get(Student, student_id)
+                if student:
+                    student.resume_url = file_url
+                    await session.commit()
+        except Exception as db_err:
+            import logging
+            logging.getLogger(__name__).warning(f"DB resume_url update failed: {db_err}")
+
+        # 3. Extract text and run AI analysis
+        from app.services.resume_service import extract_text_from_pdf, analyze_resume
+
+        resume_text = extract_text_from_pdf(file_bytes)
+        if not resume_text.strip():
+            raise HTTPException(status_code=400, detail="Could not extract text from PDF")
+
+        result = await analyze_resume(student_id, file_url, resume_text)
+        result.pop("_id", None)
+
+        return {"success": True, "analysis": result}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Resume analysis failed: {e}")
+
+
+@router.get(
+    "/resume/{student_id}",
+    summary="Get resume analysis for a student",
+)
+async def get_resume(student_id: int):
+    try:
+        from app.services.resume_service import get_resume_analysis
+        result = await get_resume_analysis(student_id)
+        if not result:
+            raise HTTPException(status_code=404, detail="No resume analysis found")
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Resume fetch failed: {e}")
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# 7.  ANALYTICS AGGREGATES
+# ══════════════════════════════════════════════════════════════════════════
+
+@router.get(
+    "/analytics/aggregates/{report_type}",
+    summary="Get pre-computed analytics aggregate",
+    description="Supported types: daily_platform_summary, course_performance, student_leaderboard, popular_content",
+)
+async def get_analytics_aggregate(
+    report_type: str,
+    course_id: Optional[int] = Query(None),
+    limit: Optional[int] = Query(10, ge=1, le=100),
+):
+    try:
+        from app.services.analytics_service import get_or_compute_aggregate
+        kwargs = {}
+        if course_id:
+            kwargs["course_id"] = course_id
+        if limit:
+            kwargs["limit"] = limit
+        result = await get_or_compute_aggregate(report_type, **kwargs)
+        result.pop("_id", None)
+        return result
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Analytics aggregate failed: {e}")
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# 8.  NOTIFICATIONS
+# ══════════════════════════════════════════════════════════════════════════
+
+@router.get(
+    "/notifications/{user_id}",
+    summary="Get notifications for a user",
+)
+async def get_notifications(
+    user_id: int,
+    unread_only: bool = Query(False),
+    limit: int = Query(20, ge=1, le=100),
+):
+    try:
+        from app.services.notification_service import get_user_notifications
+        notifications = await get_user_notifications(user_id, limit=limit, unread_only=unread_only)
+        return {"notifications": notifications, "count": len(notifications)}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Notification fetch failed: {e}")
+
+
+@router.put(
+    "/notifications/{notification_id}/read",
+    summary="Mark a notification as read",
+)
+async def mark_notification_read_endpoint(notification_id: str):
+    try:
+        from app.services.notification_service import mark_notification_read
+        success = await mark_notification_read(notification_id)
+        if not success:
+            raise HTTPException(status_code=404, detail="Notification not found")
+        return {"success": True, "message": "Notification marked as read"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Notification update failed: {e}")

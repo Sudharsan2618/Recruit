@@ -129,6 +129,33 @@ async def ensure_indexes() -> None:
     aa = db["analytics_aggregates"]
     await aa.create_index([("report_type", 1), ("period_start", -1)])
     await aa.create_index([("report_type", 1), ("entity_type", 1), ("entity_id", 1)])
+    await aa.create_index([("expires_at", 1)], expireAfterSeconds=0)  # TTL index
+
+    # flashcard_progress
+    fp = db["flashcard_progress"]
+    await fp.create_index([("student_id", 1), ("card_id", 1)], unique=True)
+    await fp.create_index([("student_id", 1), ("next_review_at", 1)])
+    await fp.create_index([("deck_id", 1)])
+
+    # event_log
+    el = db["event_log"]
+    await el.create_index([("event_type", 1), ("timestamp", -1)])
+    await el.create_index([("user_id", 1), ("timestamp", -1)])
+
+    # search_logs
+    sl = db["search_logs"]
+    await sl.create_index([("student_id", 1), ("timestamp", -1)])
+    await sl.create_index([("query", "text")])
+
+    # notification_queue
+    nq = db["notification_queue"]
+    await nq.create_index([("user_id", 1), ("created_at", -1)])
+    await nq.create_index([("notification_id", 1)], unique=True)
+    await nq.create_index([("user_id", 1), ("read", 1)])
+
+    # resume_analysis
+    ra = db["resume_analysis"]
+    await ra.create_index([("student_id", 1)], unique=True)
 
     print("[MONGO] Indexes ensured")
 

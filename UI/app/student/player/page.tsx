@@ -1,6 +1,6 @@
 "use client"
 
-import React, { useState, useEffect, useRef } from "react"
+import React, { useState, useEffect, useRef, useCallback } from "react"
 import { useSearchParams, useRouter } from "next/navigation"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -27,6 +27,8 @@ import {
   Trophy,
   RotateCcw,
   Clock,
+  StickyNote,
+  Save,
 } from "lucide-react"
 import { 
   getCourseDetail, 
@@ -54,6 +56,26 @@ const contentTypeIcons: Record<string, React.ElementType> = {
   text: BookOpen,
   quiz: HelpCircle,
   pdf: FileText,
+}
+
+// ── Watched-range helpers (unique seconds tracking) ──
+function mergeRanges(ranges: [number, number][]): [number, number][] {
+  if (ranges.length === 0) return []
+  const sorted = [...ranges].sort((a, b) => a[0] - b[0])
+  const merged: [number, number][] = [sorted[0]]
+  for (let i = 1; i < sorted.length; i++) {
+    const last = merged[merged.length - 1]
+    if (sorted[i][0] <= last[1]) {
+      last[1] = Math.max(last[1], sorted[i][1])
+    } else {
+      merged.push(sorted[i])
+    }
+  }
+  return merged
+}
+
+function totalUniqueSeconds(ranges: [number, number][]): number {
+  return mergeRanges(ranges).reduce((sum, [s, e]) => sum + (e - s), 0)
 }
 
 export default function CoursePlayer() {
@@ -84,6 +106,14 @@ export default function CoursePlayer() {
   const [sessionId, setSessionId] = useState<string | null>(null)
   const [analytics, setAnalytics] = useState<StudentActivitySummary | null>(null)
   const videoTimeRef = useRef<number>(0)
+  const videoRef = useRef<HTMLVideoElement | null>(null)
+  const watchedRangesRef = useRef<[number, number][]>([])
+  const lastReportedTimeRef = useRef<number>(0)
+
+  // Notes State
+  const [noteText, setNoteText] = useState<string>("")
+  const [notesOpen, setNotesOpen] = useState(false)
+  const [noteSaved, setNoteSaved] = useState(false)
 
   useEffect(() => {
     if (!slug) {
@@ -177,18 +207,67 @@ export default function CoursePlayer() {
     return () => clearInterval(interval)
   }, [sessionId])
 
-  // Periodic Granular Tracking for MongoDB (Video Progress)
+  // YouTube PostMessage listener — captures real currentTime from iframe
+  useEffect(() => {
+    function handleYTMessage(e: MessageEvent) {
+      try {
+        const data = typeof e.data === "string" ? JSON.parse(e.data) : e.data
+        if (data?.event === "infoDelivery" && data?.info?.currentTime != null) {
+          videoTimeRef.current = data.info.currentTime
+        }
+        // Also capture player state changes
+        if (data?.event === "onStateChange" && data?.info != null) {
+          // state 0 = ended, 1 = playing, 2 = paused
+          if (data.info === 0 && currentLesson && user?.student_id && course) {
+            // Video ended — fire final tracking
+            const totalDuration = (currentLesson.duration_minutes || 0) * 60
+            if (totalDuration > 0) {
+              watchedRangesRef.current.push([lastReportedTimeRef.current, totalDuration])
+            }
+          }
+        }
+      } catch { /* ignore non-JSON messages */ }
+    }
+    window.addEventListener("message", handleYTMessage)
+    return () => window.removeEventListener("message", handleYTMessage)
+  }, [currentLesson, user, course])
+
+  // Load saved notes when lesson changes
+  useEffect(() => {
+    if (!currentLesson) return
+    const key = `note_lesson_${currentLesson.lesson_id}`
+    const saved = localStorage.getItem(key)
+    setNoteText(saved || "")
+    setNoteSaved(false)
+  }, [currentLesson?.lesson_id])
+
+  // Periodic Granular Tracking for MongoDB (Video Progress) — with unique watched-seconds
   useEffect(() => {
     if (!currentLesson || currentLesson.content_type !== "video" || !course) return
     
     // Timer to sync video position every 20 seconds
     const interval = setInterval(() => {
-      if (videoTimeRef.current > 0 && user?.student_id) {
+      const currentTime = videoTimeRef.current
+      if (currentTime > 0 && user?.student_id) {
+        // Record watched range segment
+        const lastTime = lastReportedTimeRef.current
+        if (currentTime > lastTime) {
+          watchedRangesRef.current.push([Math.floor(lastTime), Math.floor(currentTime)])
+        } else if (currentTime < lastTime) {
+          // User seeked backward — start a new range from current position
+          // The previous range was already recorded
+        }
+        lastReportedTimeRef.current = currentTime
+
+        // Compute unique seconds from merged ranges
+        const uniqueSeconds = totalUniqueSeconds(watchedRangesRef.current)
+        const totalDuration = (currentLesson.duration_minutes || 0) * 60
+
         // Path A: PostgreSQL (State update for Resume function)
         updateLessonProgress(user.student_id, course.course_id, {
           lesson_id: currentLesson.lesson_id,
-          video_position_seconds: Math.floor(videoTimeRef.current),
-          time_spent_seconds: 20
+          video_position_seconds: Math.floor(currentTime),
+          time_spent_seconds: Math.floor(uniqueSeconds)
         }).catch(() => {})
 
         // Path B: MongoDB (Granular xAPI log)
@@ -200,9 +279,9 @@ export default function CoursePlayer() {
           session_id: sessionId || undefined,
           details: {
             video_progress: {
-              current_time_seconds: Math.floor(videoTimeRef.current),
-              total_duration_seconds: (currentLesson.duration_minutes || 0) * 60,
-              percentage_watched: (currentLesson.duration_minutes ? (videoTimeRef.current / (currentLesson.duration_minutes * 60)) * 100 : 0)
+              current_time_seconds: Math.floor(currentTime),
+              total_duration_seconds: totalDuration,
+              percentage_watched: totalDuration > 0 ? (uniqueSeconds / totalDuration) * 100 : 0
             }
           }
         }).catch(() => {})
@@ -221,6 +300,29 @@ export default function CoursePlayer() {
     }
   }, [sessionId])
 
+  // Save note handler
+  function handleSaveNote() {
+    if (!currentLesson) return
+    const key = `note_lesson_${currentLesson.lesson_id}`
+    localStorage.setItem(key, noteText)
+    setNoteSaved(true)
+    setTimeout(() => setNoteSaved(false), 2000)
+
+    // Track note_taken activity
+    if (user?.student_id && course) {
+      trackActivity({
+        student_id: user.student_id,
+        course_id: course.course_id,
+        lesson_id: currentLesson.lesson_id,
+        activity_type: "note_taken",
+        session_id: sessionId || undefined,
+        details: {
+          note: { content_length: noteText.length }
+        }
+      }).catch(console.warn)
+    }
+  }
+
   async function loadLesson(lessonId: number, courseData?: CourseDetail) {
     try {
       setLessonLoading(true)
@@ -229,6 +331,8 @@ export default function CoursePlayer() {
       setQuizAnswers({})
       setQuizResult(null)
       videoTimeRef.current = 0
+      lastReportedTimeRef.current = 0
+      watchedRangesRef.current = []
       
       const lesson = await getLesson(lessonId)
       setCurrentLesson(lesson)
@@ -243,6 +347,18 @@ export default function CoursePlayer() {
           activity_type: "lesson_started",
           session_id: sessionId || undefined
         }).catch(console.warn)
+
+        // Track document_viewed for PDF lessons
+        if (lesson.content_type === "pdf") {
+          trackActivity({
+            student_id: user.student_id,
+            course_id: activeCourse.course_id,
+            lesson_id: lesson.lesson_id,
+            activity_type: "document_viewed",
+            session_id: sessionId || undefined,
+            details: { document: { url: lesson.content_url || "", type: "pdf" } }
+          }).catch(console.warn)
+        }
       }
       
       if (lesson.content_type === "quiz" && lesson.quiz_id) {
@@ -280,22 +396,35 @@ export default function CoursePlayer() {
     }
   }
 
-  function handleMarkComplete() {
-    if (!currentLesson || !course) return
+  async function handleMarkComplete() {
+    if (!currentLesson || !course || !user?.student_id) return
     const isCompleted = completedLessons.has(currentLesson.lesson_id)
-    
+    const newCompleted = !isCompleted
+
+    // 1. Persist to PostgreSQL first — only update UI on success
+    try {
+      await updateLessonProgress(user.student_id, course.course_id, {
+        lesson_id: currentLesson.lesson_id,
+        is_completed: newCompleted
+      })
+    } catch (err) {
+      console.error("Failed to update progress:", err)
+      return // Don't toggle UI if backend failed
+    }
+
+    // 2. Update local state only after backend confirms
     setCompletedLessons((prev) => {
       const next = new Set(prev)
-      if (next.has(currentLesson.lesson_id)) {
-        next.delete(currentLesson.lesson_id)
-      } else {
+      if (newCompleted) {
         next.add(currentLesson.lesson_id)
+      } else {
+        next.delete(currentLesson.lesson_id)
       }
       return next
     })
 
-    // Track Activity: Lesson Completed (MongoDB Analytics Path)
-    if (!isCompleted && user?.student_id) {
+    // 3. Track Activity: Lesson Completed (MongoDB Analytics Path)
+    if (newCompleted) {
       trackActivity({
         student_id: user.student_id,
         course_id: course.course_id,
@@ -317,14 +446,6 @@ export default function CoursePlayer() {
           session_id: sessionId || undefined
         }).catch(console.warn)
       }
-    }
-
-    // Sync with PostgreSQL Learning Engine (Persistent State Path)
-    if (user?.student_id) {
-      updateLessonProgress(user.student_id, course.course_id, {
-        lesson_id: currentLesson.lesson_id,
-        is_completed: !isCompleted
-      }).catch(console.error)
     }
   }
 
@@ -511,23 +632,50 @@ export default function CoursePlayer() {
               ) : (
                 <div className="flex-1 flex flex-col">
                   {/* Video Player */}
+                  {/* YouTube Video Player */}
                   {currentLesson?.content_type === "video" && currentLesson?.video_external_id && (
                     <div className="aspect-video relative bg-black">
                       <iframe
                         key={`${currentLesson.lesson_id}-${savedPosition}`}
-                        src={`https://www.youtube.com/embed/${currentLesson.video_external_id}?rel=0&modestbranding=1&showinfo=0&autoplay=1&start=${savedPosition || 0}&enablejsapi=1`}
+                        src={`https://www.youtube.com/embed/${currentLesson.video_external_id}?rel=0&modestbranding=1&showinfo=0&autoplay=1&start=${savedPosition || 0}&enablejsapi=1&origin=${typeof window !== 'undefined' ? encodeURIComponent(window.location.origin) : ''}`}
                         className="absolute inset-0 h-full w-full border-0"
                         allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                         allowFullScreen
                         title={currentLesson.title}
-                        onLoad={() => {
-                           // Mock tracking current time (In a real app, use the YouTube PostMessage API)
-                           // For this demo, let's assume we track manually roughly or simplified
+                      />
+                    </div>
+                  )}
+
+                  {/* Self-hosted MP4/Video Player (GCS bucket) */}
+                  {currentLesson?.content_type === "video" && !currentLesson?.video_external_id && currentLesson?.content_url && (
+                    <div className="aspect-video relative bg-black">
+                      <video
+                        ref={videoRef}
+                        key={`mp4-${currentLesson.lesson_id}`}
+                        src={currentLesson.content_url}
+                        controls
+                        autoPlay
+                        className="absolute inset-0 h-full w-full"
+                        onTimeUpdate={(e) => {
+                          videoTimeRef.current = e.currentTarget.currentTime
+                        }}
+                        onLoadedMetadata={(e) => {
+                          // Resume from saved position
+                          if (savedPosition && savedPosition > 0) {
+                            e.currentTarget.currentTime = savedPosition
+                          }
+                        }}
+                        onEnded={() => {
+                          // Record final watched segment
+                          const ct = videoTimeRef.current
+                          if (ct > lastReportedTimeRef.current) {
+                            watchedRangesRef.current.push([
+                              Math.floor(lastReportedTimeRef.current),
+                              Math.floor(ct)
+                            ])
+                          }
                         }}
                       />
-                      {/* Note: To truly 'store' position in real-time, we'd need a Ref updating from the YouTube API onTimeEvents.
-                          For now, we use the 20s interval logic defined above using videoTimeRef.current.
-                          To make it work without PostMessage API, we'll mock the increment for the demo. */}
                     </div>
                   )}
 
@@ -673,10 +821,26 @@ export default function CoursePlayer() {
                            <FileText className="w-4 h-4 text-primary" />
                            <span className="text-sm font-medium text-foreground">{currentLesson.title}</span>
                          </div>
-                         <Button variant="ghost" size="sm" className="h-8 text-muted-foreground hover:text-foreground" asChild>
-                           <a href={currentLesson.content_url || "#"} target="_blank" rel="noopener noreferrer">
-                             <Download className="w-3.5 h-3.5 mr-2" /> Download
-                           </a>
+                         <Button
+                           variant="ghost"
+                           size="sm"
+                           className="h-8 text-muted-foreground hover:text-foreground"
+                           onClick={() => {
+                             // Track resource download
+                             if (user?.student_id && course && currentLesson) {
+                               trackActivity({
+                                 student_id: user.student_id,
+                                 course_id: course.course_id,
+                                 lesson_id: currentLesson.lesson_id,
+                                 activity_type: "resource_downloaded",
+                                 session_id: sessionId || undefined,
+                                 details: { resource: { url: currentLesson.content_url || "", type: "pdf" } }
+                               }).catch(console.warn)
+                             }
+                             window.open(currentLesson.content_url || "#", "_blank")
+                           }}
+                         >
+                           <Download className="w-3.5 h-3.5 mr-2" /> Download
                          </Button>
                        </div>
                        <iframe 
@@ -687,8 +851,17 @@ export default function CoursePlayer() {
                     </div>
                   )}
 
-                  {/* Fallback / Text content placeholder */}
-                  {(!currentLesson || (currentLesson.content_type !== "video" && currentLesson.content_type !== "quiz" && currentLesson.content_type !== "pdf")) && (
+                  {/* Text content display */}
+                  {currentLesson?.content_type === "text" && currentLesson?.text_content && (
+                    <div className="flex-1 p-8 bg-background min-h-[400px]">
+                      <pre className="whitespace-pre-wrap font-sans text-sm leading-relaxed text-foreground max-w-4xl mx-auto">
+                        {currentLesson.text_content}
+                      </pre>
+                    </div>
+                  )}
+
+                  {/* Fallback / No content placeholder */}
+                  {(!currentLesson || (currentLesson.content_type !== "video" && currentLesson.content_type !== "quiz" && currentLesson.content_type !== "pdf" && currentLesson.content_type !== "text")) && (
                     <div className="flex-1 flex flex-col items-center justify-center bg-muted/30 p-12 text-center min-h-[400px]">
                       <div className="mb-6">
                         <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-primary/10 border border-primary/20 mx-auto">
@@ -769,6 +942,36 @@ export default function CoursePlayer() {
                         </CardContent>
                       </Card>
                     ) : null}
+
+                    {/* Notes Panel */}
+                    <div className="border-t border-border pt-4">
+                      <button
+                        onClick={() => setNotesOpen(!notesOpen)}
+                        className="flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors w-full"
+                      >
+                        <StickyNote className="w-4 h-4" />
+                        <span>My Notes</span>
+                        <ChevronDown className={cn("w-4 h-4 ml-auto transition-transform", notesOpen && "rotate-180")} />
+                      </button>
+                      {notesOpen && (
+                        <div className="mt-3 space-y-2 animate-in fade-in slide-in-from-top-2 duration-200">
+                          <textarea
+                            value={noteText}
+                            onChange={(e) => setNoteText(e.target.value)}
+                            placeholder="Write your notes here..."
+                            className="w-full min-h-[120px] p-3 rounded-lg border border-border bg-muted/30 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-2 focus:ring-primary/30 resize-y"
+                          />
+                          <div className="flex items-center justify-between">
+                            <span className={cn("text-xs transition-opacity", noteSaved ? "text-emerald-500 opacity-100" : "opacity-0")}>
+                              ✓ Saved
+                            </span>
+                            <Button size="sm" variant="outline" className="h-8" onClick={handleSaveNote}>
+                              <Save className="w-3.5 h-3.5 mr-1.5" /> Save Note
+                            </Button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
 
                     {/* Instructor */}
                     <div className="flex items-center gap-3 pt-4 border-t border-border">

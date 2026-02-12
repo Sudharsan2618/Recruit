@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -9,8 +9,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Progress } from "@/components/ui/progress"
 import { Search, Star, Users, Clock, Loader2, CheckCircle2 } from "lucide-react"
 import Link from "next/link"
-import { getCourses, getCategories, getEnrollments, mapCourseToUI, type Category, type EnrollmentOut } from "@/lib/api"
+import { getCourses, getCategories, getEnrollments, mapCourseToUI, logSearch, type Category, type EnrollmentOut } from "@/lib/api"
 import { useAuth } from "@/lib/auth-context"
+
 
 export default function CourseCatalog() {
   const { user } = useAuth()
@@ -60,6 +61,18 @@ export default function CourseCatalog() {
 
   // Create a map of course_id -> enrollment
   const enrollmentMap = new Map(enrollments.map((e) => [e.course_id, e]))
+
+  // Debounced search logging (500ms)
+  const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => {
+    if (!search.trim() || !user?.student_id) return
+    if (searchTimerRef.current) clearTimeout(searchTimerRef.current)
+    searchTimerRef.current = setTimeout(() => {
+      logSearch(user.student_id!, search.trim(), "course", filtered.length).catch(() => {})
+    }, 500)
+    return () => { if (searchTimerRef.current) clearTimeout(searchTimerRef.current) }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search, user?.student_id])
 
   const filtered = courses.filter((c) => {
     if (search && !c.title.toLowerCase().includes(search.toLowerCase())) return false

@@ -79,6 +79,19 @@ def setup_bucket():
     bucket.patch()
     print("[OK]  CORS configured for frontend access")
 
+    # Grant public read access to all objects (for course assets and resumes)
+    try:
+        policy = bucket.get_iam_policy(requested_policy_version=3)
+        policy.bindings.append({
+            "role": "roles/storage.objectViewer",
+            "members": {"allUsers"}
+        })
+        bucket.set_iam_policy(policy)
+        print("[OK]  Bucket made public-readable (allUsers as Storage Object Viewer)")
+    except Exception as e:
+        print(f"[WARN] Could not make bucket public-readable: {e}")
+        print("       You may need to manually grant 'Storage Object Viewer' to 'allUsers' in GCP Console.")
+
     # Create folder structure
     folders = [
         "courses/thumbnails/",

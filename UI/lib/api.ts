@@ -546,3 +546,88 @@ export function mapMaterialToUI(material: MaterialOut & { courseName: string }) 
 function capitalize(s: string): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
+
+
+// ── Search Logging ──
+
+export async function logSearch(studentId: number, query: string, searchType: string = "course", resultsCount: number = 0) {
+  const res = await fetch(`${API_BASE}/tracking/search`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      student_id: studentId,
+      query,
+      search_type: searchType,
+      results_count: resultsCount,
+    }),
+  });
+  if (!res.ok) throw new Error("Search log failed");
+  return res.json();
+}
+
+
+// ── Resume Analysis ──
+
+export interface ResumeAnalysis {
+  student_id: number;
+  file_url: string;
+  analyzed_at: string;
+  extracted_data: {
+    skills: string[];
+    experience_years: number;
+    education: string[];
+    certifications: string[];
+    job_titles: string[];
+    summary: string;
+    languages: string[];
+  };
+  match_score_ready: boolean;
+}
+
+export async function uploadResume(studentId: number, file: File): Promise<{ success: boolean; analysis: ResumeAnalysis }> {
+  const formData = new FormData();
+  formData.append("file", file);
+  const res = await fetch(`${API_BASE}/tracking/resume/upload?student_id=${studentId}`, {
+    method: "POST",
+    body: formData,
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: "Upload failed" }));
+    throw new Error(err.detail || "Upload failed");
+  }
+  return res.json();
+}
+
+export async function getResumeAnalysis(studentId: number): Promise<ResumeAnalysis | null> {
+  const res = await fetch(`${API_BASE}/tracking/resume/${studentId}`);
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error("Failed to fetch resume analysis");
+  return res.json();
+}
+
+
+// ── Notifications ──
+
+export interface Notification {
+  notification_id: string;
+  user_id: number;
+  type: string;
+  title: string;
+  body: string;
+  status: string;
+  read: boolean;
+  created_at: string;
+  metadata: Record<string, unknown>;
+}
+
+export async function getNotifications(userId: number, unreadOnly: boolean = false): Promise<{ notifications: Notification[]; count: number }> {
+  const params = new URLSearchParams({ unread_only: String(unreadOnly) });
+  const res = await fetch(`${API_BASE}/tracking/notifications/${userId}?${params}`);
+  if (!res.ok) throw new Error("Failed to fetch notifications");
+  return res.json();
+}
+
+export async function markNotificationRead(notificationId: string): Promise<void> {
+  const res = await fetch(`${API_BASE}/tracking/notifications/${notificationId}/read`, { method: "PUT" });
+  if (!res.ok) throw new Error("Failed to mark notification read");
+}

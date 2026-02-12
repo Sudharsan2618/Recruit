@@ -12,17 +12,27 @@ from app.db.mongodb import connect_mongodb, close_mongodb, ensure_indexes
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application startup/shutdown lifecycle."""
+    import os
+    port = os.getenv("PORT", "8080")
     print(f"[START] {settings.APP_NAME} API starting...")
-    print(f"[DOCS]  http://localhost:8000/docs")
+    print(f"[INFO]  Listening on port: {port}")
+    print(f"[DOCS]  http://localhost:{port}/docs")
 
     # MongoDB connect + indexes
-    await connect_mongodb()
-    await ensure_indexes()
+    try:
+        await connect_mongodb()
+        await ensure_indexes()
+    except Exception as e:
+        print(f"[ERROR] Database startup failed: {e}")
+        print("        App will continue to start but DB features may fail.")
 
     yield
 
     # Shutdown
-    await close_mongodb()
+    try:
+        await close_mongodb()
+    except Exception as e:
+        print(f"[ERROR] Database shutdown error: {e}")
     print(f"[STOP]  {settings.APP_NAME} API shutting down...")
 
 
@@ -42,6 +52,7 @@ app.add_middleware(
         settings.FRONTEND_URL,
         "http://localhost:3000",
         "http://localhost:3001",
+        "https://recruit-smoky.vercel.app",
     ],
     allow_credentials=True,
     allow_methods=["*"],

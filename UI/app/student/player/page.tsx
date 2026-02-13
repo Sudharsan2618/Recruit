@@ -29,7 +29,10 @@ import {
   Clock,
   StickyNote,
   Save,
+  Award,
+  Star,
 } from "lucide-react"
+import Link from "next/link"
 import { 
   getCourseDetail, 
   getLesson, 
@@ -41,12 +44,16 @@ import {
   getCourseProgress,
   updateLessonProgress,
   getStudentAnalytics,
+  getEnrollments,
+  issueCertificate,
+  getCertificateViewUrl,
   type CourseDetail, 
   type LessonFull, 
   type LessonBrief, 
   type QuizOut,
   type LessonProgressOut,
-  type StudentActivitySummary
+  type StudentActivitySummary,
+  type EnrollmentOut
 } from "@/lib/api"
 import { useAuth } from "@/lib/auth-context"
 import { cn } from "@/lib/utils"
@@ -115,6 +122,11 @@ export default function CoursePlayer() {
   const [noteText, setNoteText] = useState<string>("")
   const [notesOpen, setNotesOpen] = useState(false)
   const [noteSaved, setNoteSaved] = useState(false)
+
+  // Certificate State
+  const [enrollment, setEnrollment] = useState<EnrollmentOut | null>(null)
+  const [certLoading, setCertLoading] = useState(false)
+  const [showCertBanner, setShowCertBanner] = useState(false)
 
   useEffect(() => {
     if (!slug) {
@@ -186,6 +198,17 @@ export default function CoursePlayer() {
         }
       } catch (aErr) {
         console.warn("Failed to fetch student analytics", aErr)
+      }
+
+      // 4. Fetch enrollment for certificate status
+      try {
+        if (user.student_id) {
+          const enrolls = await getEnrollments(user.student_id)
+          const existing = enrolls.find((e) => e.course_id === course.course_id)
+          if (existing) setEnrollment(existing)
+        }
+      } catch (eErr) {
+        console.warn("Failed to fetch enrollment", eErr)
       }
     }
 
@@ -608,6 +631,38 @@ export default function CoursePlayer() {
         </div>
       </header>
 
+      {/* Certificate Banner — shown when course is 100% complete */}
+      {progressPercent >= 100 && (
+        <div className="flex items-center gap-3 border-b border-amber-200 bg-gradient-to-r from-amber-50 via-amber-50/80 to-yellow-50 dark:from-amber-950/30 dark:via-amber-900/20 dark:to-yellow-950/20 px-6 py-3 shrink-0 z-10">
+          <Award className="h-5 w-5 text-amber-600 shrink-0" />
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold text-foreground">Congratulations! You completed this course!</p>
+            <p className="text-xs text-muted-foreground">Claim your certificate of completion.</p>
+          </div>
+          {enrollment?.certificate_issued ? (
+            <Button size="sm" variant="outline" className="shrink-0 gap-1.5 border-amber-300 hover:bg-amber-100" onClick={() => window.open(getCertificateViewUrl(enrollment.enrollment_id), '_blank')}>
+              <Award className="h-3.5 w-3.5 text-amber-600" />
+              View Certificate
+            </Button>
+          ) : enrollment ? (
+            <Button size="sm" className="shrink-0 gap-1.5 bg-amber-600 hover:bg-amber-700" disabled={certLoading} onClick={async () => {
+              setCertLoading(true)
+              try {
+                const res = await issueCertificate(enrollment.enrollment_id)
+                setEnrollment({ ...enrollment, certificate_issued: true, certificate_url: res.certificate_url })
+                window.open(getCertificateViewUrl(enrollment.enrollment_id), '_blank')
+              } catch (err) { console.error('Certificate issue failed:', err) }
+              finally { setCertLoading(false) }
+            }}>
+              {certLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Award className="h-3.5 w-3.5" />}
+              {certLoading ? "Issuing..." : "Get Certificate"}
+            </Button>
+          ) : (
+            <Loader2 className="h-4 w-4 animate-spin text-amber-600 shrink-0" />
+          )}
+        </div>
+      )}
+
       {/* Main content - Immersive Layout */}
       <div className="flex flex-1 overflow-hidden relative">
         {/* Content area */}
@@ -807,43 +862,56 @@ export default function CoursePlayer() {
                     </div>
                   )}
 
-                  {/* PDF Viewer */}
-                  {currentLesson?.content_type === "pdf" && (
-                    <div className="flex-1 flex flex-col overflow-hidden">
-                       <div className="h-12 bg-muted flex items-center justify-between px-6 shrink-0 border-b border-border">
-                         <div className="flex items-center gap-2">
-                           <FileText className="w-4 h-4 text-primary" />
-                           <span className="text-sm font-medium text-foreground">{currentLesson.title}</span>
-                         </div>
-                         <Button
-                           variant="ghost"
-                           size="sm"
-                           className="h-8 text-muted-foreground hover:text-foreground"
-                           onClick={() => {
-                             // Track resource download
-                             if (user?.student_id && course && currentLesson) {
-                               trackActivity({
-                                 student_id: user.student_id,
-                                 course_id: course.course_id,
-                                 lesson_id: currentLesson.lesson_id,
-                                 activity_type: "resource_downloaded",
-                                 session_id: sessionId || undefined,
-                                 details: { resource: { url: currentLesson.content_url || "", type: "pdf" } }
-                               }).catch(console.warn)
-                             }
-                             window.open(currentLesson.content_url || "#", "_blank")
-                           }}
-                         >
-                           <Download className="w-3.5 h-3.5 mr-2" /> Download
-                         </Button>
-                       </div>
-                       <iframe 
-                        src={`${currentLesson.content_url}#toolbar=0`} 
-                        className="flex-1 w-full border-none min-h-[600px]"
-                        title={currentLesson.title}
-                       />
-                    </div>
-                  )}
+                  {/* Document Viewer — PDF / PPTX / DOCX */}
+                  {currentLesson?.content_type === "pdf" && (() => {
+                    const url = currentLesson.content_url || ""
+                    const ext = url.split(".").pop()?.toLowerCase() || ""
+                    const isOfficeDoc = ["pptx", "ppt", "docx", "doc", "xlsx", "xls"].includes(ext)
+                    const fileTypeLabel = ext === "pptx" || ext === "ppt" ? "Presentation"
+                      : ext === "docx" || ext === "doc" ? "Document"
+                      : ext === "xlsx" || ext === "xls" ? "Spreadsheet"
+                      : "PDF"
+                    const viewerUrl = isOfficeDoc
+                      ? `https://docs.google.com/gview?url=${encodeURIComponent(url)}&embedded=true`
+                      : `${url}#toolbar=0`
+
+                    return (
+                      <div className="flex-1 flex flex-col overflow-hidden">
+                        <div className="h-12 bg-muted flex items-center justify-between px-6 shrink-0 border-b border-border">
+                          <div className="flex items-center gap-2">
+                            <FileText className="w-4 h-4 text-primary" />
+                            <span className="text-sm font-medium text-foreground">{currentLesson.title}</span>
+                            <Badge variant="outline" className="text-[10px] px-1.5 py-0">{fileTypeLabel}</Badge>
+                          </div>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 text-muted-foreground hover:text-foreground"
+                            onClick={() => {
+                              if (user?.student_id && course && currentLesson) {
+                                trackActivity({
+                                  student_id: user.student_id,
+                                  course_id: course.course_id,
+                                  lesson_id: currentLesson.lesson_id,
+                                  activity_type: "resource_downloaded",
+                                  session_id: sessionId || undefined,
+                                  details: { resource: { url, type: ext || "pdf" } }
+                                }).catch(console.warn)
+                              }
+                              window.open(url, "_blank")
+                            }}
+                          >
+                            <Download className="w-3.5 h-3.5 mr-2" /> Download
+                          </Button>
+                        </div>
+                        <iframe
+                          src={viewerUrl}
+                          className="flex-1 w-full border-none min-h-[600px]"
+                          title={currentLesson.title}
+                        />
+                      </div>
+                    )
+                  })()}
 
                   {/* Text content display */}
                   {currentLesson?.content_type === "text" && currentLesson?.text_content && (
@@ -909,7 +977,14 @@ export default function CoursePlayer() {
                             {React.createElement(contentTypeIcons[currentLesson.content_type], { className: "h-4 w-4 text-primary" })}
                           </div>
                         )}
-                        <Badge variant="outline" className="text-xs">{currentLesson?.content_type || "Lesson"}</Badge>
+                        <Badge variant="outline" className="text-xs">{
+                          currentLesson?.content_type === "pdf" && currentLesson?.content_url
+                            ? (() => {
+                                const e = currentLesson.content_url.split(".").pop()?.toLowerCase() || ""
+                                return e === "pptx" || e === "ppt" ? "Slides" : e === "docx" || e === "doc" ? "Document" : "PDF"
+                              })()
+                            : currentLesson?.content_type || "Lesson"
+                        }</Badge>
                       </div>
                       <h2 className="text-2xl font-bold text-foreground">
                         {currentLesson?.title || "Select a lesson"}
@@ -1038,6 +1113,22 @@ export default function CoursePlayer() {
                           </div>
                           <Progress value={progressPercent} className="h-1.5" />
                         </div>
+
+                        {/* Review & Course Detail links for completed courses */}
+                        {progressPercent >= 100 && (
+                          <div className="grid grid-cols-2 gap-3 pt-2 border-t border-border">
+                            <Button variant="outline" size="sm" asChild className="h-10 font-medium">
+                              <Link href={`/student/courses/${course.slug}#reviews`}>
+                                <Star className="h-3.5 w-3.5 mr-1.5" /> Review
+                              </Link>
+                            </Button>
+                            <Button variant="outline" size="sm" asChild className="h-10 font-medium">
+                              <Link href={`/student/courses/${course.slug}`}>
+                                <BookOpen className="h-3.5 w-3.5 mr-1.5" /> Details
+                              </Link>
+                            </Button>
+                          </div>
+                        )}
                       </CardContent>
                     </Card>
                     {analytics && (

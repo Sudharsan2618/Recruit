@@ -9,6 +9,7 @@ import { GraduationCap, Menu, X, LogOut, Home } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { useState } from "react"
+import { NotificationBell } from "@/components/notification-bell"
 
 interface NavItem {
   label: string
@@ -21,9 +22,10 @@ interface PortalShellProps {
   portalName: string
   navItems: NavItem[]
   portalColor: string
+  showNotifications?: boolean
 }
 
-export function PortalShell({ children, portalName, navItems, portalColor }: PortalShellProps) {
+export function PortalShell({ children, portalName, navItems, portalColor, showNotifications = true }: PortalShellProps) {
   const pathname = usePathname()
   const [mobileOpen, setMobileOpen] = useState(false)
 
@@ -137,7 +139,12 @@ export function PortalShell({ children, portalName, navItems, portalColor }: Por
             <Menu className="h-5 w-5" />
             <span className="sr-only">Open menu</span>
           </Button>
-          <span className="text-sm font-semibold text-foreground">{portalName}</span>
+          <span className="text-sm font-semibold text-foreground flex-1">{portalName}</span>
+          {showNotifications && <NotificationBell />}
+        </header>
+        {/* Desktop top bar with notifications */}
+        <header className="hidden lg:flex h-14 items-center justify-end border-b border-border bg-card px-6">
+          {showNotifications && <NotificationBell />}
         </header>
         <main className="flex-1 overflow-y-auto bg-background p-6">
           {children}

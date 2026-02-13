@@ -70,6 +70,7 @@ def build_student_text(
     job_titles: list[str] | None = None,
     summary: str = "",
     bio: str = "",
+    completed_courses: list[str] | None = None,
 ) -> str:
     """Build a single text block from student data for embedding."""
     parts = []
@@ -87,51 +88,133 @@ def build_student_text(
         parts.append(f"Certifications: {'; '.join(certifications)}")
     if job_titles:
         parts.append(f"Previous Roles: {', '.join(job_titles)}")
+    if completed_courses:
+        parts.append(f"Completed Courses: {'; '.join(completed_courses)}")
     return "\n".join(parts)
 
 
 async def generate_student_embedding(student_id: int) -> Optional[dict]:
     """
-    Generate and store an embedding for a student based on their resume analysis.
+    Generate and store an embedding for a student.
 
-    Fetches the latest resume_analysis from MongoDB, builds the embedding text,
-    generates an embedding via Gemini, and upserts into PostgreSQL student_embeddings.
+    Data sources (merged, best-effort):
+      1. PostgreSQL — student profile (bio, headline, education, experience_years)
+      2. PostgreSQL — student_skills table
+      3. PostgreSQL — enrolled / completed course titles
+      4. MongoDB   — resume_analysis extracted data (skills, certifications, job_titles, summary)
+
+    Works even if only profile data exists (e.g. right after onboarding).
 
     Returns:
-        dict with embedding metadata, or None if no resume analysis found
+        dict with embedding metadata, or None if no meaningful text could be built
     """
     from app.db.postgres import async_session_factory
     from app.models.embedding import StudentEmbedding
     from sqlalchemy import select
 
-    # 1. Fetch resume analysis from MongoDB
-    db = get_mongodb()
-    analysis = await db["resume_analysis"].find_one(
-        {"student_id": student_id},
-        {"_id": 0},
-    )
-    if not analysis or "extracted_data" not in analysis:
-        return None
-
-    extracted = analysis["extracted_data"]
-
-    # 2. Fetch student bio from PostgreSQL
+    # ── 1. PostgreSQL: student profile + skills + courses ────────────────
     bio = ""
+    headline = ""
+    education_pg = ""
+    experience_years = 0
+    pg_skills: list[str] = []
+    completed_courses: list[str] = []
+    enrolled_courses: list[str] = []
+    preferred_job_types: list[str] = []
+
     async with async_session_factory() as session:
         from app.models.user import Student
+        from sqlalchemy import text as sql_text
+
         student = await session.get(Student, student_id)
         if student:
             bio = student.bio or ""
+            headline = student.headline or ""
+            education_pg = student.education or ""
+            experience_years = student.experience_years or 0
+            preferred_job_types = student.preferred_job_types or []
 
-    # 3. Build text and check hash
+        # Skills from student_skills join
+        skills_q = await session.execute(
+            sql_text("""
+                SELECT s.skill_name
+                FROM student_skills ss
+                JOIN skills s ON s.skill_id = ss.skill_id
+                WHERE ss.student_id = :sid
+            """),
+            {"sid": student_id},
+        )
+        pg_skills = [row[0] for row in skills_q.fetchall()]
+
+        # Completed course titles
+        comp_q = await session.execute(
+            sql_text("""
+                SELECT c.title
+                FROM enrollments e
+                JOIN courses c ON c.course_id = e.course_id
+                WHERE e.student_id = :sid AND (e.status = 'completed' OR e.certificate_issued = true)
+                ORDER BY e.completed_at DESC
+            """),
+            {"sid": student_id},
+        )
+        completed_courses = [row[0] for row in comp_q.fetchall()]
+
+        # Currently enrolled (in-progress) course titles
+        enr_q = await session.execute(
+            sql_text("""
+                SELECT c.title
+                FROM enrollments e
+                JOIN courses c ON c.course_id = e.course_id
+                WHERE e.student_id = :sid AND e.status = 'active'
+                ORDER BY e.enrolled_at DESC
+            """),
+            {"sid": student_id},
+        )
+        enrolled_courses = [row[0] for row in enr_q.fetchall()]
+
+    # ── 2. MongoDB: resume analysis (optional enrichment) ────────────────
+    extracted: dict = {}
+    try:
+        db = get_mongodb()
+        analysis = await db["resume_analysis"].find_one(
+            {"student_id": student_id},
+            {"_id": 0},
+        )
+        if analysis and "extracted_data" in analysis:
+            extracted = analysis["extracted_data"]
+    except Exception:
+        pass  # MongoDB unavailable — continue with PG data only
+
+    # ── 3. Merge data: resume analysis enriches PG data ──────────────────
+    all_skills = list(dict.fromkeys(
+        extracted.get("skills", []) + pg_skills
+    ))  # deduplicated, preserving order
+
+    education_list = extracted.get("education", [])
+    if education_pg and education_pg not in education_list:
+        education_list = [education_pg] + education_list
+
+    summary = extracted.get("summary", "")
+    if not summary and headline:
+        summary = headline
+
+    certifications = extracted.get("certifications", [])
+    job_titles = extracted.get("job_titles", [])
+    if preferred_job_types:
+        job_titles = list(dict.fromkeys(job_titles + [jt.replace("_", " ") for jt in preferred_job_types]))
+
+    all_courses = completed_courses + enrolled_courses
+
+    # ── 4. Build text and check hash ─────────────────────────────────────
     embed_text = build_student_text(
-        skills=extracted.get("skills", []),
-        experience_years=extracted.get("experience_years", 0),
-        education=extracted.get("education", []),
-        certifications=extracted.get("certifications", []),
-        job_titles=extracted.get("job_titles", []),
-        summary=extracted.get("summary", ""),
+        skills=all_skills,
+        experience_years=extracted.get("experience_years", experience_years),
+        education=education_list,
+        certifications=certifications,
+        job_titles=job_titles,
+        summary=summary,
         bio=bio,
+        completed_courses=all_courses,
     )
 
     if not embed_text.strip():

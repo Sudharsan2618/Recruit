@@ -6,6 +6,10 @@ from typing import Optional
 
 from app.db.postgres import get_db
 from app.services.auth_service import AuthService, create_access_token, decode_access_token
+from app.services.embedding_service import generate_student_embedding
+
+import logging
+logger = logging.getLogger(__name__)
 from app.schemas.auth import (
     LoginRequest, TokenResponse, UserOut,
     StudentRegisterRequest, CompanyRegisterRequest,
@@ -135,6 +139,15 @@ async def complete_student_onboarding(
         user_data = await service.update_student_onboarding(user_id, body.model_dump(exclude_none=True))
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
+
+    # Trigger initial student embedding generation (background, non-blocking)
+    if user_data.get("student_id"):
+        try:
+            result = await generate_student_embedding(user_data["student_id"])
+            logger.info(f"Onboarding embedding for student {user_data['student_id']}: {result.get('status') if result else 'no_data'}")
+        except Exception as e:
+            logger.warning(f"Onboarding embedding failed for student {user_data['student_id']}: {e}")
+
     return UserOut(**user_data)
 
 

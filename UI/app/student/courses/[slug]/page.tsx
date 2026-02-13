@@ -40,11 +40,14 @@ import {
   getEnrollments,
   enrollInCourse,
   trackActivity,
+  issueCertificate,
+  getCertificateViewUrl,
   type CourseDetail,
   type EnrollmentOut,
 } from "@/lib/api"
 import { useAuth } from "@/lib/auth-context"
 import { CourseDetailSkeleton } from "@/components/skeletons"
+import { CourseReviews } from "@/components/course-reviews"
 
 const contentTypeIcons: Record<string, React.ElementType> = {
   video: Video,
@@ -67,6 +70,7 @@ export default function CourseDetailPage() {
   const [showPayment, setShowPayment] = useState(false)
   const [paymentProcessing, setPaymentProcessing] = useState(false)
   const [paymentSuccess, setPaymentSuccess] = useState(false)
+  const [certLoading, setCertLoading] = useState(false)
 
   useEffect(() => {
     async function fetchData() {
@@ -97,6 +101,15 @@ export default function CourseDetailPage() {
     }
     fetchData()
   }, [slug, user?.student_id])
+
+  // Scroll to #reviews anchor if present in URL
+  useEffect(() => {
+    if (!loading && course && window.location.hash === "#reviews") {
+      setTimeout(() => {
+        document.getElementById("reviews")?.scrollIntoView({ behavior: "smooth" })
+      }, 300)
+    }
+  }, [loading, course])
 
   function toggleModule(id: number) {
     setExpandedModules((prev) =>
@@ -244,20 +257,51 @@ export default function CourseDetailPage() {
           {/* Enrolled progress */}
           {enrollment && (
             <Card className="border-emerald-200 bg-emerald-50/30 dark:bg-emerald-950/10">
-              <CardContent className="flex items-center gap-4 p-4">
-                <div className="flex-1">
-                  <p className="text-sm font-medium text-foreground">Your Progress</p>
-                  <div className="flex items-center gap-3 mt-1">
-                    <Progress value={progress} className="h-2 flex-1" />
-                    <span className="text-sm font-bold text-foreground">{progress}%</span>
+              <CardContent className="flex flex-col gap-3 p-4">
+                <div className="flex items-center gap-4">
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-foreground">Your Progress</p>
+                    <div className="flex items-center gap-3 mt-1">
+                      <Progress value={progress} className="h-2 flex-1" />
+                      <span className="text-sm font-bold text-foreground">{progress}%</span>
+                    </div>
                   </div>
+                  <Button asChild>
+                    <Link href={`/student/player?slug=${course.slug}`}>
+                      <Play className="mr-2 h-4 w-4" />
+                      {progress > 0 ? "Continue Learning" : "Start Learning"}
+                    </Link>
+                  </Button>
                 </div>
-                <Button asChild>
-                  <Link href={`/student/player?slug=${course.slug}`}>
-                    <Play className="mr-2 h-4 w-4" />
-                    {progress > 0 ? "Continue Learning" : "Start Learning"}
-                  </Link>
-                </Button>
+                {/* Certificate section */}
+                {(progress >= 100 || enrollment.status === "completed") && (
+                  <div className="flex items-center gap-3 rounded-lg border border-amber-200 bg-amber-50/50 dark:bg-amber-950/10 px-4 py-3">
+                    <Award className="h-5 w-5 text-amber-600 shrink-0" />
+                    <div className="flex-1">
+                      <p className="text-sm font-medium text-foreground">Course Completed!</p>
+                      <p className="text-xs text-muted-foreground">You can now claim your certificate of completion.</p>
+                    </div>
+                    {enrollment.certificate_issued ? (
+                      <Button size="sm" variant="outline" className="shrink-0 gap-1.5" onClick={() => window.open(getCertificateViewUrl(enrollment.enrollment_id), '_blank')}>
+                        <Award className="h-3.5 w-3.5" />
+                        View Certificate
+                      </Button>
+                    ) : (
+                      <Button size="sm" className="shrink-0 gap-1.5" disabled={certLoading} onClick={async () => {
+                        setCertLoading(true)
+                        try {
+                          const res = await issueCertificate(enrollment.enrollment_id)
+                          setEnrollment({ ...enrollment, certificate_issued: true, certificate_url: res.certificate_url })
+                          window.open(getCertificateViewUrl(enrollment.enrollment_id), '_blank')
+                        } catch (err) { console.error('Certificate issue failed:', err) }
+                        finally { setCertLoading(false) }
+                      }}>
+                        {certLoading ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Award className="h-3.5 w-3.5" />}
+                        {certLoading ? "Issuing..." : "Get Certificate"}
+                      </Button>
+                    )}
+                  </div>
+                )}
               </CardContent>
             </Card>
           )}
@@ -333,6 +377,11 @@ export default function CourseDetailPage() {
               ))}
             </CardContent>
           </Card>
+
+          {/* Reviews Section */}
+          <div id="reviews">
+            <CourseReviews courseId={course.course_id} isEnrolled={!!enrollment} />
+          </div>
         </div>
 
         {/* Sidebar — Enrollment Card */}

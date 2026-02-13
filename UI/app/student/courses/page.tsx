@@ -204,11 +204,26 @@ export default function CourseCatalog() {
 
                   {/* Action buttons */}
                   {isEnrolled ? (
-                    <Button size="sm" asChild className="mt-1">
-                      <Link href={`/student/player?slug=${course.slug}`}>
-                        {progress >= 100 ? "Review Course" : "Continue Learning"}
-                      </Link>
-                    </Button>
+                    progress >= 100 ? (
+                      <div className="flex gap-2 mt-1">
+                        <Button size="sm" variant="outline" asChild className="flex-1">
+                          <Link href={`/student/courses/${course.slug}#reviews`}>
+                            Write Review
+                          </Link>
+                        </Button>
+                        <Button size="sm" asChild className="flex-1">
+                          <Link href={`/student/courses/${course.slug}`}>
+                            View Course
+                          </Link>
+                        </Button>
+                      </div>
+                    ) : (
+                      <Button size="sm" asChild className="mt-1">
+                        <Link href={`/student/player?slug=${course.slug}`}>
+                          Continue Learning
+                        </Link>
+                      </Button>
+                    )
                   ) : (
                     <Button variant="outline" size="sm" asChild className="mt-1">
                       <Link href={`/student/courses/${course.slug}`}>

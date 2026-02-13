@@ -1,9 +1,11 @@
 "use client"
 
 import React from "react"
-import { usePathname } from "next/navigation"
+import { usePathname, useRouter } from "next/navigation"
 
+import { AuthProvider, useAuth } from "@/lib/auth-context"
 import { PortalShell } from "@/components/portal-shell"
+import { DashboardSkeleton } from "@/components/skeletons"
 import {
   LayoutDashboard,
   Users,
@@ -26,9 +28,35 @@ const adminNav = [
   { label: "System Controls", href: "/admin/settings", icon: Settings },
 ]
 
-export default function AdminLayout({ children }: { children: React.ReactNode }) {
+const UNGUARDED_PATHS = ["/admin/login"]
+
+function AuthGuard({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
-  if (pathname === "/admin/login") {
+  const router = useRouter()
+  const { isAuthenticated, loading, user } = useAuth()
+
+  if (UNGUARDED_PATHS.includes(pathname)) return <>{children}</>
+
+  if (loading) {
+    return (
+      <PortalShell portalName="Admin Portal" navItems={adminNav} portalColor="bg-foreground">
+        <DashboardSkeleton />
+      </PortalShell>
+    )
+  }
+
+  if (!isAuthenticated || user?.user_type !== "admin") {
+    router.push("/admin/login")
+    return null
+  }
+
+  return <>{children}</>
+}
+
+function LayoutContent({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname()
+
+  if (UNGUARDED_PATHS.includes(pathname)) {
     return <>{children}</>
   }
 
@@ -36,6 +64,16 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     <PortalShell portalName="Admin Portal" navItems={adminNav} portalColor="bg-foreground">
       {children}
     </PortalShell>
+  )
+}
+
+export default function AdminLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <AuthProvider>
+      <AuthGuard>
+        <LayoutContent>{children}</LayoutContent>
+      </AuthGuard>
+    </AuthProvider>
   )
 }
 

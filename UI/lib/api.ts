@@ -437,6 +437,9 @@ export interface EnrollmentOut {
   enrolled_at: string;
   started_at: string | null;
   completed_at: string | null;
+  certificate_issued: boolean;
+  certificate_url: string | null;
+  certificate_issued_at: string | null;
   course: CourseListItem | null;
 }
 
@@ -809,6 +812,155 @@ export async function getCompanyJobs(): Promise<JobOut[]> {
 }
 
 
+// ── Student Jobs ──
+
+export interface SkillBrief {
+  skill_id: number;
+  name: string;
+  is_mandatory: boolean;
+  min_experience_years: number | null;
+}
+
+export interface CompanyBrief {
+  company_id: number;
+  company_name: string;
+  logo_url: string | null;
+  industry: string | null;
+  company_location: string | null;
+}
+
+export interface JobListItem {
+  job_id: number;
+  title: string;
+  slug: string;
+  description: string;
+  employment_type: string;
+  remote_type: string;
+  location: string | null;
+  salary_min: number | null;
+  salary_max: number | null;
+  salary_currency: string;
+  salary_is_visible: boolean;
+  experience_min_years: number;
+  experience_max_years: number | null;
+  benefits: string[] | null;
+  posted_at: string | null;
+  deadline: string | null;
+  department: string | null;
+  applications_count: number;
+  match_score: number | null;
+  skills: SkillBrief[];
+  company: CompanyBrief;
+}
+
+export interface CompanyDetail extends CompanyBrief {
+  company_website: string | null;
+  company_size: string | null;
+  company_description: string | null;
+}
+
+export interface JobDetailFull {
+  job_id: number;
+  title: string;
+  slug: string;
+  description: string;
+  responsibilities: string | null;
+  requirements: string | null;
+  nice_to_have: string | null;
+  employment_type: string;
+  remote_type: string;
+  location: string | null;
+  department: string | null;
+  salary_min: number | null;
+  salary_max: number | null;
+  salary_currency: string;
+  salary_is_visible: boolean;
+  experience_min_years: number;
+  experience_max_years: number | null;
+  benefits: string[] | null;
+  posted_at: string | null;
+  deadline: string | null;
+  applications_count: number;
+  match_score: number | null;
+  has_applied: boolean;
+  skills: SkillBrief[];
+  company: CompanyDetail;
+}
+
+export interface ApplicationOut {
+  application_id: number;
+  job_id: number;
+  status: string;
+  cover_letter: string | null;
+  expected_salary: number | null;
+  notice_period_days: number | null;
+  applied_at: string | null;
+  updated_at: string | null;
+  job_title: string | null;
+  company_name: string | null;
+  company_logo: string | null;
+  match_score: number | null;
+}
+
+export interface ApplyPayload {
+  cover_letter?: string;
+  expected_salary?: number;
+  notice_period_days?: number;
+}
+
+/** Get AI-recommended jobs for authenticated student */
+export async function getRecommendedJobs(limit = 20): Promise<{ jobs: JobListItem[]; threshold: number; total: number }> {
+  return fetchApiWithAuth(`/student-jobs/recommended?limit=${limit}`);
+}
+
+/** Get all active jobs with optional filters */
+export async function getStudentJobs(params: {
+  search?: string;
+  employment_type?: string;
+  remote_type?: string;
+  location?: string;
+  limit?: number;
+  offset?: number;
+} = {}): Promise<{ jobs: JobListItem[]; total: number }> {
+  const query = new URLSearchParams();
+  if (params.search) query.set("search", params.search);
+  if (params.employment_type) query.set("employment_type", params.employment_type);
+  if (params.remote_type) query.set("remote_type", params.remote_type);
+  if (params.location) query.set("location", params.location);
+  if (params.limit) query.set("limit", String(params.limit));
+  if (params.offset) query.set("offset", String(params.offset));
+  return fetchApiWithAuth(`/student-jobs?${query.toString()}`);
+}
+
+/** Get full job detail */
+export async function getJobDetail(jobId: number): Promise<JobDetailFull> {
+  return fetchApiWithAuth(`/student-jobs/${jobId}`);
+}
+
+/** Apply to a job */
+export async function applyToJob(jobId: number, data: ApplyPayload): Promise<ApplicationOut> {
+  const token = typeof window !== "undefined" ? localStorage.getItem("auth_token") : null;
+  const res = await fetch(`${API_BASE}/student-jobs/${jobId}/apply`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: "Failed to apply" }));
+    throw new Error(err.detail || "Failed to apply");
+  }
+  return res.json();
+}
+
+/** Get student's applications */
+export async function getMyApplications(): Promise<{ applications: ApplicationOut[]; total: number }> {
+  return fetchApiWithAuth("/student-jobs/applications/me");
+}
+
+
 // ── Student Dashboard ──
 
 export interface DashboardStats {
@@ -852,28 +1004,435 @@ export async function getStudentDashboard(): Promise<StudentDashboardData> {
 }
 
 
+// ══════════════════════════════════════════════════════════════════════════
+// ADMIN PORTAL API
+// ══════════════════════════════════════════════════════════════════════════
+
+// ── Admin Dashboard ──
+
+export interface AdminDashboardData {
+  total_students: number;
+  total_companies: number;
+  active_courses: number;
+  active_jobs: number;
+  total_applications: number;
+  pending_review: number;
+  forwarded: number;
+  hired: number;
+  total_enrollments: number;
+  new_users_30d: number;
+}
+
+export async function getAdminDashboard(): Promise<AdminDashboardData> {
+  return fetchApiWithAuth<AdminDashboardData>("/admin/dashboard");
+}
+
+export interface DashboardChartData {
+  user_growth: { month: string; students: number; companies: number; total: number }[];
+  application_trend: { month: string; applications: number; forwarded: number; hired: number }[];
+  status_distribution: { status: string; count: number }[];
+  top_jobs: { title: string; company_name: string; count: number; pending: number; forwarded: number }[];
+  jobs_trend: { month: string; jobs_posted: number }[];
+  enrollment_trend: { month: string; enrollments: number }[];
+}
+
+export async function getAdminDashboardCharts(): Promise<DashboardChartData> {
+  return fetchApiWithAuth<DashboardChartData>("/admin/dashboard/charts");
+}
+
+// ── Admin User Management ──
+
+export interface AdminUser {
+  user_id: number;
+  email: string;
+  user_type: string;
+  status: string;
+  created_at: string;
+  last_login_at: string | null;
+  onboarding_completed: boolean;
+  name: string;
+  student_id: number | null;
+  first_name: string | null;
+  last_name: string | null;
+  headline: string | null;
+  profile_picture_url: string | null;
+  company_id: number | null;
+  company_name: string | null;
+  logo_url: string | null;
+  industry: string | null;
+  enrollments_count: number;
+  applications_count: number;
+}
+
+export async function getAdminUsers(params: {
+  search?: string;
+  role?: string;
+  status?: string;
+  sort_by?: string;
+  sort_order?: string;
+  limit?: number;
+  offset?: number;
+}): Promise<{ users: AdminUser[]; total: number; summary: { student_count: number; company_count: number; active_count: number } }> {
+  const query = new URLSearchParams();
+  if (params.search) query.set("search", params.search);
+  if (params.role) query.set("role", params.role);
+  if (params.status) query.set("status", params.status);
+  if (params.sort_by) query.set("sort_by", params.sort_by);
+  if (params.sort_order) query.set("sort_order", params.sort_order);
+  if (params.limit) query.set("limit", String(params.limit));
+  if (params.offset) query.set("offset", String(params.offset));
+  return fetchApiWithAuth(`/admin/users?${query.toString()}`);
+}
+
+export async function updateUserStatus(userId: number, newStatus: string): Promise<{ success: boolean }> {
+  return fetchApiWithAuth(`/admin/users/${userId}/status?new_status=${newStatus}`, { method: "PUT" });
+}
+
+export async function deleteUser(userId: number): Promise<{ success: boolean }> {
+  return fetchApiWithAuth(`/admin/users/${userId}`, { method: "DELETE" });
+}
+
+// ── Admin Course Management ──
+
+export interface AdminCourse {
+  course_id: number;
+  title: string;
+  slug: string;
+  short_description: string | null;
+  difficulty_level: string;
+  pricing_model: string;
+  price: number;
+  currency: string;
+  is_published: boolean;
+  created_at: string;
+  updated_at: string | null;
+  duration_hours: string | null;
+  thumbnail_url: string | null;
+  category_name: string | null;
+  instructor_name: string | null;
+  enrollment_count: number;
+  module_count: number;
+  lesson_count: number;
+}
+
+export async function getAdminCourses(params: {
+  search?: string;
+  status?: string;
+  sort_by?: string;
+  sort_order?: string;
+  limit?: number;
+  offset?: number;
+}): Promise<{ courses: AdminCourse[]; total: number; summary: { published_count: number; draft_count: number; total_enrollments: number } }> {
+  const query = new URLSearchParams();
+  if (params.search) query.set("search", params.search);
+  if (params.status) query.set("status", params.status);
+  if (params.sort_by) query.set("sort_by", params.sort_by);
+  if (params.sort_order) query.set("sort_order", params.sort_order);
+  if (params.limit) query.set("limit", String(params.limit));
+  if (params.offset) query.set("offset", String(params.offset));
+  return fetchApiWithAuth(`/admin/courses?${query.toString()}`);
+}
+
+export async function toggleCoursePublish(courseId: number, publish: boolean): Promise<{ success: boolean }> {
+  return fetchApiWithAuth(`/admin/courses/${courseId}/publish?publish=${publish}`, { method: "PUT" });
+}
+
+export async function deleteAdminCourse(courseId: number): Promise<{ success: boolean }> {
+  return fetchApiWithAuth(`/admin/courses/${courseId}`, { method: "DELETE" });
+}
+
+// ── Admin Job Matching Hub ──
+
+export interface AdminJob {
+  job_id: number;
+  title: string;
+  slug: string;
+  employment_type: string;
+  remote_type: string;
+  location: string | null;
+  job_status: string;
+  posted_at: string | null;
+  deadline: string | null;
+  salary_min: number | null;
+  salary_max: number | null;
+  salary_currency: string;
+  department: string | null;
+  experience_min_years: number;
+  company_id: number;
+  company_name: string;
+  logo_url: string | null;
+  industry: string | null;
+  applications_count: number;
+  pending_count: number;
+  forwarded_count: number;
+  hired_count: number;
+}
+
+export interface JobApplicant {
+  application_id: number;
+  student_id: number;
+  application_status: string;
+  cover_letter: string | null;
+  resume_url: string | null;
+  expected_salary: number | null;
+  notice_period_days: number | null;
+  applied_at: string;
+  admin_notes: string | null;
+  admin_match_score: number | null;
+  first_name: string | null;
+  last_name: string | null;
+  name: string;
+  headline: string | null;
+  profile_picture_url: string | null;
+  current_location: string | null;
+  total_experience_months: number | null;
+  student_resume_url: string | null;
+  linkedin_url: string | null;
+  github_url: string | null;
+  portfolio_url: string | null;
+  email: string;
+  user_id: number;
+  match_score: number;
+  skills: string[];
+}
+
+export async function getAdminJobs(params: {
+  search?: string;
+  status?: string;
+  sort_by?: string;
+  sort_order?: string;
+  limit?: number;
+  offset?: number;
+}): Promise<{ jobs: AdminJob[]; total: number; summary: { total_jobs: number; total_pending: number; total_forwarded: number; total_applications: number } }> {
+  const query = new URLSearchParams();
+  if (params.search) query.set("search", params.search);
+  if (params.status) query.set("status", params.status);
+  if (params.sort_by) query.set("sort_by", params.sort_by);
+  if (params.sort_order) query.set("sort_order", params.sort_order);
+  if (params.limit) query.set("limit", String(params.limit));
+  if (params.offset) query.set("offset", String(params.offset));
+  return fetchApiWithAuth(`/admin/jobs?${query.toString()}`);
+}
+
+export async function getJobApplicants(jobId: number, params: {
+  search?: string;
+  status?: string;
+  min_match?: number;
+  sort_by?: string;
+  sort_order?: string;
+  limit?: number;
+  offset?: number;
+}): Promise<{ applicants: JobApplicant[]; total: number; job: { job_id: number; title: string } }> {
+  const query = new URLSearchParams();
+  if (params.search) query.set("search", params.search);
+  if (params.status) query.set("status", params.status);
+  if (params.min_match) query.set("min_match", String(params.min_match));
+  if (params.sort_by) query.set("sort_by", params.sort_by);
+  if (params.sort_order) query.set("sort_order", params.sort_order);
+  if (params.limit) query.set("limit", String(params.limit));
+  if (params.offset) query.set("offset", String(params.offset));
+  return fetchApiWithAuth(`/admin/jobs/${jobId}/applicants?${query.toString()}`);
+}
+
+export async function bulkApproveApplications(applicationIds: number[]): Promise<{ success: boolean; updated: number }> {
+  const ids = applicationIds.map((id) => `application_ids=${id}`).join("&");
+  return fetchApiWithAuth(`/admin/applications/bulk-approve?${ids}`, { method: "POST" });
+}
+
+export async function updateApplicationStatus(
+  applicationId: number,
+  newStatus: string,
+  notes?: string,
+): Promise<{ success: boolean }> {
+  const query = new URLSearchParams({ new_status: newStatus });
+  if (notes) query.set("notes", notes);
+  return fetchApiWithAuth(`/admin/applications/${applicationId}/status?${query.toString()}`, { method: "PUT" });
+}
+
+
+// ══════════════════════════════════════════════════════════════════════════
+// COMPANY CANDIDATES API
+// ══════════════════════════════════════════════════════════════════════════
+
+export interface CompanyCandidate {
+  application_id: number;
+  student_id: number;
+  job_id: number;
+  application_status: string;
+  company_stage: string | null;
+  cover_letter: string | null;
+  resume_url: string | null;
+  expected_salary: number | null;
+  notice_period_days: number | null;
+  applied_at: string;
+  forwarded_at: string | null;
+  admin_match_score: number | null;
+  first_name: string | null;
+  last_name: string | null;
+  name: string;
+  headline: string | null;
+  profile_picture_url: string | null;
+  current_location: string | null;
+  total_experience_months: number | null;
+  student_resume_url: string | null;
+  linkedin_url: string | null;
+  github_url: string | null;
+  portfolio_url: string | null;
+  email: string;
+  job_title: string;
+  department: string | null;
+  match_score: number;
+  skills: string[];
+  courses_count: number;
+}
+
+export async function getCompanyCandidates(params: {
+  stage?: string;
+  search?: string;
+  limit?: number;
+  offset?: number;
+}): Promise<{ candidates: CompanyCandidate[]; total: number }> {
+  const query = new URLSearchParams();
+  if (params.stage) query.set("stage", params.stage);
+  if (params.search) query.set("search", params.search);
+  if (params.limit) query.set("limit", String(params.limit));
+  if (params.offset) query.set("offset", String(params.offset));
+  return fetchApiWithAuth(`/jobs/company/candidates?${query.toString()}`);
+}
+
+export async function updateCandidateStage(
+  applicationId: number,
+  newStage: string,
+): Promise<{ success: boolean }> {
+  return fetchApiWithAuth(`/jobs/company/candidates/${applicationId}/stage?new_stage=${newStage}`, { method: "PUT" });
+}
+
 // ── Notifications ──
 
 export interface Notification {
-  notification_id: string;
-  user_id: number;
+  notification_id: number;
   type: string;
   title: string;
-  body: string;
-  status: string;
-  read: boolean;
+  message: string;
+  action_url: string | null;
+  action_text: string | null;
+  reference_type: string | null;
+  reference_id: number | null;
+  is_read: boolean;
+  read_at: string | null;
   created_at: string;
-  metadata: Record<string, unknown>;
 }
 
-export async function getNotifications(userId: number, unreadOnly: boolean = false): Promise<{ notifications: Notification[]; count: number }> {
-  const params = new URLSearchParams({ unread_only: String(unreadOnly) });
-  const res = await fetch(`${API_BASE}/tracking/notifications/${userId}?${params}`);
-  if (!res.ok) throw new Error("Failed to fetch notifications");
+export async function getNotifications(params: {
+  limit?: number;
+  offset?: number;
+  unread_only?: boolean;
+}): Promise<{ notifications: Notification[]; total: number }> {
+  const query = new URLSearchParams();
+  if (params.limit) query.set("limit", String(params.limit));
+  if (params.offset) query.set("offset", String(params.offset));
+  if (params.unread_only) query.set("unread_only", "true");
+  return fetchApiWithAuth(`/notifications?${query.toString()}`);
+}
+
+export async function getUnreadCount(): Promise<{ unread_count: number }> {
+  return fetchApiWithAuth("/notifications/unread-count");
+}
+
+export async function markNotificationRead(notificationId: number): Promise<{ success: boolean }> {
+  return fetchApiWithAuth(`/notifications/${notificationId}/read`, { method: "PUT" });
+}
+
+export async function markAllNotificationsRead(): Promise<{ success: boolean; updated: number }> {
+  return fetchApiWithAuth("/notifications/read-all", { method: "PUT" });
+}
+
+export async function deleteNotification(notificationId: number): Promise<{ success: boolean }> {
+  return fetchApiWithAuth(`/notifications/${notificationId}`, { method: "DELETE" });
+}
+
+// ── Course Reviews ──
+
+export interface CourseReview {
+  review_id: number;
+  rating: number;
+  review_text: string | null;
+  helpful_count: number;
+  is_featured: boolean;
+  created_at: string;
+  student_name: string;
+  student_picture: string | null;
+  student_headline: string | null;
+}
+
+export interface ReviewStats {
+  total_reviews: number;
+  average_rating: number;
+  five_star: number;
+  four_star: number;
+  three_star: number;
+  two_star: number;
+  one_star: number;
+}
+
+export async function getCourseReviews(courseId: number, params?: {
+  sort_by?: string;
+  limit?: number;
+  offset?: number;
+}): Promise<{ reviews: CourseReview[]; stats: ReviewStats }> {
+  const query = new URLSearchParams();
+  if (params?.sort_by) query.set("sort_by", params.sort_by);
+  if (params?.limit) query.set("limit", String(params.limit));
+  if (params?.offset) query.set("offset", String(params.offset));
+  const res = await fetch(`${API_BASE}/courses/${courseId}/reviews?${query.toString()}`);
+  if (!res.ok) throw new Error("Failed to fetch reviews");
   return res.json();
 }
 
-export async function markNotificationRead(notificationId: string): Promise<void> {
-  const res = await fetch(`${API_BASE}/tracking/notifications/${notificationId}/read`, { method: "PUT" });
-  if (!res.ok) throw new Error("Failed to mark notification read");
+export async function getMyReview(courseId: number): Promise<{ review: { review_id: number; rating: number; review_text: string; created_at: string } | null }> {
+  return fetchApiWithAuth(`/courses/${courseId}/reviews/me`);
+}
+
+export async function submitReview(courseId: number, rating: number, reviewText: string): Promise<{ success: boolean; review_id: number }> {
+  const query = new URLSearchParams({ rating: String(rating), review_text: reviewText });
+  return fetchApiWithAuth(`/courses/${courseId}/reviews?${query.toString()}`, { method: "POST" });
+}
+
+export async function updateReview(courseId: number, rating: number, reviewText: string): Promise<{ success: boolean }> {
+  const query = new URLSearchParams({ rating: String(rating), review_text: reviewText });
+  return fetchApiWithAuth(`/courses/${courseId}/reviews?${query.toString()}`, { method: "PUT" });
+}
+
+export async function deleteReview(courseId: number): Promise<{ success: boolean }> {
+  return fetchApiWithAuth(`/courses/${courseId}/reviews`, { method: "DELETE" });
+}
+
+// ── Certificates ──
+
+export interface Certificate {
+  enrollment_id: number;
+  course_title: string;
+  course_slug: string;
+  difficulty_level: string;
+  duration_hours: number;
+  certificate_url: string;
+  issued_at: string | null;
+  completed_at: string | null;
+}
+
+export async function issueCertificate(enrollmentId: number): Promise<{
+  success: boolean;
+  already_issued: boolean;
+  certificate_url: string;
+  issued_at?: string;
+}> {
+  return fetchApiWithAuth(`/certificates/issue/${enrollmentId}`, { method: "POST" });
+}
+
+export async function getMyCertificates(): Promise<{ certificates: Certificate[]; total: number }> {
+  return fetchApiWithAuth("/certificates/my");
+}
+
+export function getCertificateViewUrl(enrollmentId: number): string {
+  return `${API_BASE}/certificates/view/${enrollmentId}`;
 }

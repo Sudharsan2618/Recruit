@@ -126,9 +126,23 @@ async def enroll_in_course(
 ):
     """Enroll a student in a course."""
     try:
-        return await service.enroll_student(body.student_id, course_id)
+        enrollment = await service.enroll_student(body.student_id, course_id)
     except ValueError as e:
         raise HTTPException(status_code=409, detail=str(e))
+
+    # Regenerate student embedding (now includes enrolled course)
+    try:
+        from app.services.embedding_service import generate_student_embedding
+        import logging
+        emb = await generate_student_embedding(body.student_id)
+        logging.getLogger(__name__).info(
+            f"Enrollment embedding for student {body.student_id}: {emb.get('status') if emb else 'no_data'}"
+        )
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning(f"Enrollment embedding failed: {e}")
+
+    return enrollment
 
 
 @student_router.get("/enrollments", response_model=list[EnrollmentOut])

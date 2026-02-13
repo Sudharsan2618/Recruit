@@ -183,11 +183,11 @@ class CourseRepository:
             existing.progress_percentage = max(
                 float(existing.progress_percentage), progress_percentage
             )
+            from datetime import datetime
             existing.time_spent_seconds += time_spent_seconds
             existing.video_position_seconds = video_position_seconds
             if is_completed:
                 existing.is_completed = True
-                from datetime import datetime
                 existing.completed_at = datetime.utcnow()
             existing.last_accessed_at = datetime.utcnow()
             await self.db.flush()

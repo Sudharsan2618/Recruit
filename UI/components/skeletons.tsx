@@ -258,26 +258,57 @@ export function PlayerSkeleton() {
 function JobCardSkeleton() {
   return (
     <Card>
-      <CardContent className="flex flex-col gap-4 p-5 md:flex-row md:items-start md:justify-between">
+      <CardContent className="flex flex-col gap-3 p-5 md:flex-row md:items-start md:justify-between">
         <div className="flex-1">
           <div className="flex flex-wrap items-center gap-2">
-            <Skeleton className="h-6 w-48" />
+            <Skeleton className="h-5 w-48" />
             <Skeleton className="h-5 w-20 rounded-full" />
           </div>
-          <Skeleton className="h-4 w-32 mt-1" />
-          <div className="mt-3 flex flex-wrap items-center gap-4">
-            <Skeleton className="h-3 w-20" />
+          <div className="flex items-center gap-2 mt-1.5">
+            <Skeleton className="h-3.5 w-3.5 rounded" />
+            <Skeleton className="h-4 w-28" />
             <Skeleton className="h-3 w-16" />
-            <Skeleton className="h-3 w-24" />
+          </div>
+          <div className="mt-2.5 flex flex-wrap items-center gap-3">
+            <Skeleton className="h-3 w-16" />
+            <Skeleton className="h-3 w-16" />
+            <Skeleton className="h-3 w-14" />
+            <Skeleton className="h-3 w-20" />
             <Skeleton className="h-3 w-14" />
           </div>
-          <div className="mt-3 flex flex-wrap gap-1.5">
+          <div className="mt-2.5 flex flex-wrap gap-1.5">
             {Array.from({ length: 4 }).map((_, i) => (
-              <Skeleton key={i} className="h-5 w-16 rounded-full" />
+              <Skeleton key={i} className="h-5 w-14 rounded-full" />
             ))}
           </div>
         </div>
-        <Skeleton className="h-10 w-24 rounded-md shrink-0" />
+        <Skeleton className="h-8 w-20 rounded-md shrink-0" />
+      </CardContent>
+    </Card>
+  )
+}
+
+// ── Recommended Card Skeleton ──
+function RecommendedCardSkeleton() {
+  return (
+    <Card className="border-amber-100">
+      <CardContent className="p-4">
+        <div className="flex items-start justify-between gap-2">
+          <div className="flex-1 min-w-0">
+            <Skeleton className="h-4 w-32" />
+            <Skeleton className="h-3 w-24 mt-1" />
+          </div>
+          <Skeleton className="h-5 w-20 rounded-full" />
+        </div>
+        <div className="flex items-center gap-2 mt-2">
+          <Skeleton className="h-3 w-16" />
+          <Skeleton className="h-3 w-16" />
+        </div>
+        <div className="flex gap-1 mt-2">
+          <Skeleton className="h-4 w-12 rounded-full" />
+          <Skeleton className="h-4 w-14 rounded-full" />
+          <Skeleton className="h-4 w-10 rounded-full" />
+        </div>
       </CardContent>
     </Card>
   )
@@ -288,15 +319,41 @@ export function JobBoardSkeleton() {
   return (
     <div className="flex flex-col gap-6">
       <PageHeaderSkeleton />
+      {/* Tabs skeleton */}
+      <div className="flex items-center gap-1">
+        <Skeleton className="h-9 w-32 rounded-md" />
+        <Skeleton className="h-9 w-36 rounded-md" />
+      </div>
+      {/* Recommended section */}
+      <div className="mt-2">
+        <div className="flex items-center gap-2 mb-3">
+          <Skeleton className="h-5 w-5 rounded" />
+          <Skeleton className="h-5 w-44" />
+          <Skeleton className="h-5 w-16 rounded-full" />
+        </div>
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <RecommendedCardSkeleton key={i} />
+          ))}
+        </div>
+      </div>
+      {/* Filters */}
       <div className="flex flex-wrap items-center gap-3">
         <Skeleton className="h-10 flex-1 min-w-[200px] rounded-md" />
-        <Skeleton className="h-10 w-[140px] rounded-md" />
-        <Skeleton className="h-10 w-[140px] rounded-md" />
+        <Skeleton className="h-10 w-[150px] rounded-md" />
+        <Skeleton className="h-10 w-[150px] rounded-md" />
       </div>
-      <div className="flex flex-col gap-4">
-        {Array.from({ length: 4 }).map((_, i) => (
-          <JobCardSkeleton key={i} />
-        ))}
+      {/* All jobs heading */}
+      <div>
+        <div className="flex items-center gap-2 mb-3">
+          <Skeleton className="h-5 w-28" />
+          <Skeleton className="h-5 w-14 rounded-full" />
+        </div>
+        <div className="flex flex-col gap-3">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <JobCardSkeleton key={i} />
+          ))}
+        </div>
       </div>
     </div>
   )

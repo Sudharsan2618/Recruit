@@ -16,6 +16,7 @@ import {
   UserCheck,
   Share2,
   Award,
+  GraduationCap,
 } from "lucide-react"
 
 const studentNav = [
@@ -26,7 +27,8 @@ const studentNav = [
   { label: "Job Board", href: "/student/jobs", icon: Briefcase },
   { label: "Mentors", href: "/student/mentors", icon: UserCheck },
   { label: "Referrals", href: "/student/referrals", icon: Share2 },
-  { label: "Placement Support", href: "/student/placements", icon: Award },
+  { label: "Certificates", href: "/student/certificates", icon: Award },
+  { label: "Placement Support", href: "/student/placements", icon: GraduationCap },
   { label: "My Profile", href: "/student/profile", icon: User },
 ]
 

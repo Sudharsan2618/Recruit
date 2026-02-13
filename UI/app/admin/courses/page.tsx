@@ -1,271 +1,260 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { Search, Plus, BookOpen, FileText, Video, Upload, Loader2 } from "lucide-react"
-import { getCourses, getCategories, getAllMaterials, mapCourseToUI, mapMaterialToUI, type Category } from "@/lib/api"
-import { webinars } from "@/lib/mock-data"
+import { Search, BookOpen, Users, Layers, Eye, EyeOff, Trash2, Loader2 } from "lucide-react"
+import { getAdminCourses, toggleCoursePublish, deleteAdminCourse, type AdminCourse } from "@/lib/api"
+import { DashboardSkeleton } from "@/components/skeletons"
+import { TablePagination } from "@/components/table-pagination"
+
+const levelColors: Record<string, string> = {
+  beginner: "bg-success/10 text-success",
+  intermediate: "bg-primary/10 text-primary",
+  advanced: "bg-destructive/10 text-destructive",
+}
 
 export default function CourseManagement() {
-  const [search, setSearch] = useState("")
-  const [courseOpen, setCourseOpen] = useState(false)
-  const [courses, setCourses] = useState<ReturnType<typeof mapCourseToUI>[]>([])
-  const [categories, setCategories] = useState<Category[]>([])
-  const [materials, setMaterials] = useState<ReturnType<typeof mapMaterialToUI>[]>([])
+  const [courses, setCourses] = useState<AdminCourse[]>([])
+  const [total, setTotal] = useState(0)
   const [loading, setLoading] = useState(true)
+  const [actionLoading, setActionLoading] = useState<number | null>(null)
+  const [search, setSearch] = useState("")
+  const [searchDebounced, setSearchDebounced] = useState("")
+  const [statusFilter, setStatusFilter] = useState("all")
+  const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(10)
+  const [summary, setSummary] = useState({ published_count: 0, draft_count: 0, total_enrollments: 0 })
 
   useEffect(() => {
-    async function fetchData() {
-      try {
-        setLoading(true)
-        const [courseRes, catRes, matRes] = await Promise.all([
-          getCourses({ page_size: 50 }),
-          getCategories(),
-          getAllMaterials(),
-        ])
-        setCourses(courseRes.courses.map(mapCourseToUI))
-        setCategories(catRes)
-        setMaterials(matRes.map(mapMaterialToUI))
-      } catch (err) {
-        console.error("Failed to fetch data:", err)
-      } finally {
-        setLoading(false)
-      }
-    }
-    fetchData()
-  }, [])
+    const t = setTimeout(() => setSearchDebounced(search), 400)
+    return () => clearTimeout(t)
+  }, [search])
 
-  const filteredCourses = courses.filter((c) => c.title.toLowerCase().includes(search.toLowerCase()))
+  useEffect(() => { setPage(1) }, [searchDebounced, statusFilter])
+
+  const loadCourses = useCallback(() => {
+    setLoading(true)
+    getAdminCourses({
+      search: searchDebounced,
+      status: statusFilter,
+      limit: pageSize,
+      offset: (page - 1) * pageSize,
+    })
+      .then((res) => { setCourses(res.courses); setTotal(res.total); setSummary(res.summary) })
+      .catch((err) => console.error("Failed to load courses:", err))
+      .finally(() => setLoading(false))
+  }, [searchDebounced, statusFilter, page, pageSize])
+
+  useEffect(() => { loadCourses() }, [loadCourses])
+
+  const { published_count: publishedCount, draft_count: draftCount, total_enrollments: totalEnrollments } = summary
+
+  async function handleTogglePublish(courseId: number, publish: boolean) {
+    setActionLoading(courseId)
+    try {
+      await toggleCoursePublish(courseId, publish)
+      loadCourses()
+    } catch (err) {
+      console.error("Toggle publish failed:", err)
+    } finally {
+      setActionLoading(null)
+    }
+  }
+
+  async function handleDelete(courseId: number, title: string) {
+    if (!confirm(`Are you sure you want to delete "${title}"? This cannot be undone.`)) return
+    setActionLoading(courseId)
+    try {
+      await deleteAdminCourse(courseId)
+      loadCourses()
+    } catch (err) {
+      console.error("Delete failed:", err)
+    } finally {
+      setActionLoading(null)
+    }
+  }
+
+  if (loading && courses.length === 0) return <DashboardSkeleton />
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground">Course & Content Management</h1>
-          <p className="text-muted-foreground">Create courses, upload SCORM content, schedule webinars, and manage materials.</p>
-        </div>
-        <Dialog open={courseOpen} onOpenChange={setCourseOpen}>
-          <DialogTrigger asChild>
-            <Button className="gap-2 self-start"><Plus className="h-4 w-4" /> New Course</Button>
-          </DialogTrigger>
-          <DialogContent className="sm:max-w-lg">
-            <DialogHeader>
-              <DialogTitle>Create New Course</DialogTitle>
-            </DialogHeader>
-            <div className="flex flex-col gap-4 pt-4">
-              <div className="flex flex-col gap-1.5">
-                <Label>Course Title</Label>
-                <Input placeholder="e.g. Advanced Python Programming" />
-              </div>
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className="flex flex-col gap-1.5">
-                  <Label>Category</Label>
-                  <Select>
-                    <SelectTrigger><SelectValue placeholder="Select category" /></SelectTrigger>
-                    <SelectContent>
-                      {categories.map((c) => (
-                        <SelectItem key={c.slug} value={c.slug}>{c.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="flex flex-col gap-1.5">
-                  <Label>Skill Level</Label>
-                  <Select>
-                    <SelectTrigger><SelectValue placeholder="Select level" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="beginner">Beginner</SelectItem>
-                      <SelectItem value="intermediate">Intermediate</SelectItem>
-                      <SelectItem value="advanced">Advanced</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className="flex flex-col gap-1.5">
-                  <Label>Instructor</Label>
-                  <Input placeholder="Instructor name" />
-                </div>
-                <div className="flex flex-col gap-1.5">
-                  <Label>Price (INR)</Label>
-                  <Input type="number" placeholder="0 for free" />
-                </div>
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <Label>Description</Label>
-                <Textarea rows={3} placeholder="Course description..." />
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <Label>SCORM Package</Label>
-                <div className="flex items-center justify-center rounded-lg border-2 border-dashed border-border px-4 py-8 text-center">
-                  <div className="flex flex-col items-center gap-2">
-                    <Upload className="h-8 w-8 text-muted-foreground" />
-                    <p className="text-sm text-muted-foreground">Drag and drop SCORM .zip file or click to browse</p>
-                    <Button variant="outline" size="sm">Browse Files</Button>
-                  </div>
-                </div>
-              </div>
-              <div className="flex justify-end gap-3 pt-2">
-                <Button variant="outline" onClick={() => setCourseOpen(false)}>Cancel</Button>
-                <Button onClick={() => setCourseOpen(false)}>Create Course</Button>
-              </div>
-            </div>
-          </DialogContent>
-        </Dialog>
+      <div>
+        <h1 className="text-2xl font-bold text-foreground">Course Management</h1>
+        <p className="text-muted-foreground">Manage courses, publish/unpublish, and track enrollments.</p>
       </div>
 
-      <Tabs defaultValue="courses">
-        <TabsList>
-          <TabsTrigger value="courses" className="gap-1.5"><BookOpen className="h-3.5 w-3.5" /> Courses</TabsTrigger>
-          <TabsTrigger value="webinars" className="gap-1.5"><Video className="h-3.5 w-3.5" /> Webinars</TabsTrigger>
-          <TabsTrigger value="materials" className="gap-1.5"><FileText className="h-3.5 w-3.5" /> Materials</TabsTrigger>
-        </TabsList>
+      {/* Summary cards */}
+      <div className="grid gap-4 sm:grid-cols-3">
+        <Card>
+          <CardContent className="flex items-center gap-3 p-5">
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-success/10">
+              <BookOpen className="h-5 w-5 text-success" />
+            </div>
+            <div>
+              <p className="text-2xl font-bold text-foreground">{publishedCount}</p>
+              <p className="text-xs text-muted-foreground">Published</p>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="flex items-center gap-3 p-5">
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-muted">
+              <Layers className="h-5 w-5 text-muted-foreground" />
+            </div>
+            <div>
+              <p className="text-2xl font-bold text-foreground">{draftCount}</p>
+              <p className="text-xs text-muted-foreground">Drafts</p>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="flex items-center gap-3 p-5">
+            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10">
+              <Users className="h-5 w-5 text-primary" />
+            </div>
+            <div>
+              <p className="text-2xl font-bold text-foreground">{totalEnrollments}</p>
+              <p className="text-xs text-muted-foreground">Total Enrollments</p>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
 
-        {/* Courses Tab */}
-        <TabsContent value="courses" className="mt-4 flex flex-col gap-4">
-          <div className="relative max-w-sm">
-            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-            <Input placeholder="Search courses..." className="pl-9" value={search} onChange={(e) => setSearch(e.target.value)} />
-          </div>
+      {/* Filters */}
+      <div className="flex flex-col gap-3 sm:flex-row">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Input placeholder="Search courses..." className="pl-9" value={search} onChange={(e) => setSearch(e.target.value)} />
+        </div>
+        <Select value={statusFilter} onValueChange={setStatusFilter}>
+          <SelectTrigger className="w-full sm:w-44"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Courses</SelectItem>
+            <SelectItem value="published">Published</SelectItem>
+            <SelectItem value="draft">Drafts</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
 
+      <div className="text-xs text-muted-foreground">{total} courses found</div>
+
+      {/* Courses table */}
+      <Card>
+        <CardContent className="p-0">
           {loading ? (
             <div className="flex items-center justify-center py-12">
-              <Loader2 className="h-6 w-6 animate-spin text-primary" />
-              <span className="ml-2 text-sm text-muted-foreground">Loading courses...</span>
+              <Loader2 className="h-5 w-5 animate-spin text-primary mr-2" />
+              <span className="text-sm text-muted-foreground">Loading...</span>
             </div>
           ) : (
-            <Card>
-              <CardContent className="p-0">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Course</TableHead>
-                      <TableHead>Category</TableHead>
-                      <TableHead>Level</TableHead>
-                      <TableHead className="hidden md:table-cell">Students</TableHead>
-                      <TableHead className="hidden md:table-cell">Rating</TableHead>
-                      <TableHead className="hidden lg:table-cell">Price</TableHead>
-                      <TableHead className="text-right">Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {filteredCourses.map((course) => (
-                      <TableRow key={course.id}>
-                        <TableCell>
-                          <div>
-                            <p className="font-medium text-foreground">{course.title}</p>
-                            <p className="text-xs text-muted-foreground">{course.instructor} - {course.duration}</p>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant="outline">{course.category}</Badge>
-                        </TableCell>
-                        <TableCell>
-                          <Badge className="bg-secondary text-secondary-foreground">{course.level}</Badge>
-                        </TableCell>
-                        <TableCell className="hidden text-sm text-muted-foreground md:table-cell">{course.students.toLocaleString()}</TableCell>
-                        <TableCell className="hidden text-sm text-muted-foreground md:table-cell">{course.rating > 0 ? course.rating.toFixed(1) : "—"}</TableCell>
-                        <TableCell className="hidden text-sm text-muted-foreground lg:table-cell">
-                          {course.isFree ? <Badge className="bg-success/10 text-success">Free</Badge> : `₹${course.price.toLocaleString()}`}
-                        </TableCell>
-                        <TableCell className="text-right">
-                          <div className="flex justify-end gap-2">
-                            <Button size="sm" variant="outline">Edit</Button>
-                            <Button size="sm" variant="ghost" className="text-destructive hover:text-destructive">Remove</Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </CardContent>
-            </Card>
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Course</TableHead>
+                  <TableHead>Category</TableHead>
+                  <TableHead>Level</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead className="hidden md:table-cell">Enrollments</TableHead>
+                  <TableHead className="hidden md:table-cell">Modules</TableHead>
+                  <TableHead className="hidden lg:table-cell">Price</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {courses.map((course) => (
+                  <TableRow key={course.course_id}>
+                    <TableCell>
+                      <div>
+                        <p className="font-medium text-foreground">{course.title}</p>
+                        <p className="text-xs text-muted-foreground">
+                          {course.instructor_name || "No instructor"} · {course.lesson_count} lessons
+                        </p>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="outline">{course.category_name || "—"}</Badge>
+                    </TableCell>
+                    <TableCell>
+                      <Badge className={levelColors[course.difficulty_level] || "bg-secondary text-secondary-foreground"}>
+                        {course.difficulty_level}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      {course.is_published ? (
+                        <Badge className="bg-success/10 text-success">Published</Badge>
+                      ) : (
+                        <Badge className="bg-muted text-muted-foreground">Draft</Badge>
+                      )}
+                    </TableCell>
+                    <TableCell className="hidden text-sm text-muted-foreground md:table-cell">
+                      {course.enrollment_count}
+                    </TableCell>
+                    <TableCell className="hidden text-sm text-muted-foreground md:table-cell">
+                      {course.module_count}
+                    </TableCell>
+                    <TableCell className="hidden text-sm text-muted-foreground lg:table-cell">
+                      {course.price === 0 ? (
+                        <Badge className="bg-success/10 text-success">Free</Badge>
+                      ) : (
+                        `₹${course.price.toLocaleString()}`
+                      )}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      {actionLoading === course.course_id ? (
+                        <Loader2 className="h-4 w-4 animate-spin ml-auto" />
+                      ) : (
+                        <div className="flex justify-end gap-1">
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="gap-1 text-xs"
+                            onClick={() => handleTogglePublish(course.course_id, !course.is_published)}
+                          >
+                            {course.is_published ? (
+                              <><EyeOff className="h-3.5 w-3.5" /> Unpublish</>
+                            ) : (
+                              <><Eye className="h-3.5 w-3.5" /> Publish</>
+                            )}
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="text-destructive hover:text-destructive"
+                            onClick={() => handleDelete(course.course_id, course.title)}
+                          >
+                            <Trash2 className="h-3.5 w-3.5" />
+                          </Button>
+                        </div>
+                      )}
+                    </TableCell>
+                  </TableRow>
+                ))}
+                {courses.length === 0 && (
+                  <TableRow>
+                    <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
+                      No courses found.
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
           )}
-        </TabsContent>
-
-        {/* Webinars Tab - still uses mock data (no backend endpoint yet) */}
-        <TabsContent value="webinars" className="mt-4">
-          <div className="grid gap-4 md:grid-cols-2">
-            {webinars.map((w) => (
-              <Card key={w.id}>
-                <CardContent className="flex flex-col gap-3 p-5">
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <h3 className="font-semibold text-foreground">{w.title}</h3>
-                      <p className="text-sm text-muted-foreground">{w.instructor}</p>
-                    </div>
-                    <Badge className={w.status === "upcoming" ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"}>
-                      {w.status === "upcoming" ? "Upcoming" : "Completed"}
-                    </Badge>
-                  </div>
-                  <p className="text-sm leading-relaxed text-muted-foreground">{w.description}</p>
-                  <div className="flex items-center gap-4 text-xs text-muted-foreground">
-                    <span>{w.date} at {w.time}</span>
-                    <span>{w.attendees} attendees</span>
-                  </div>
-                  <div className="flex gap-2">
-                    <Button size="sm" variant="outline">Edit</Button>
-                    {w.status === "upcoming" && <Button size="sm" variant="ghost" className="text-destructive hover:text-destructive">Cancel</Button>}
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        </TabsContent>
-
-        {/* Materials Tab */}
-        <TabsContent value="materials" className="mt-4">
-          {loading ? (
-            <div className="flex items-center justify-center py-12">
-              <Loader2 className="h-6 w-6 animate-spin text-primary" />
-              <span className="ml-2 text-sm text-muted-foreground">Loading materials...</span>
-            </div>
-          ) : (
-            <Card>
-              <CardContent className="p-0">
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Material</TableHead>
-                      <TableHead>Type</TableHead>
-                      <TableHead>Course</TableHead>
-                      <TableHead className="hidden md:table-cell">Size</TableHead>
-                      <TableHead className="hidden md:table-cell">Downloads</TableHead>
-                      <TableHead className="text-right">Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {materials.map((m) => (
-                      <TableRow key={m.id}>
-                        <TableCell className="font-medium text-foreground">{m.title}</TableCell>
-                        <TableCell><Badge variant="outline">{m.type}</Badge></TableCell>
-                        <TableCell className="text-sm text-muted-foreground">{m.course}</TableCell>
-                        <TableCell className="hidden text-sm text-muted-foreground md:table-cell">{m.size}</TableCell>
-                        <TableCell className="hidden text-sm text-muted-foreground md:table-cell">{m.downloads.toLocaleString()}</TableCell>
-                        <TableCell className="text-right">
-                          <div className="flex justify-end gap-2">
-                            <Button size="sm" variant="outline">Replace</Button>
-                            <Button size="sm" variant="ghost" className="text-destructive hover:text-destructive">Remove</Button>
-                          </div>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-              </CardContent>
-            </Card>
+          {!loading && total > 0 && (
+            <TablePagination
+              total={total}
+              page={page}
+              pageSize={pageSize}
+              onPageChange={setPage}
+              onPageSizeChange={setPageSize}
+            />
           )}
-        </TabsContent>
-      </Tabs>
+        </CardContent>
+      </Card>
     </div>
   )
 }

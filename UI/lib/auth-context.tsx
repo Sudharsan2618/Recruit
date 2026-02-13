@@ -165,7 +165,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(null)
     localStorage.removeItem("auth_token")
     localStorage.removeItem("auth_user")
-    if (userType === "company") {
+    if (userType === "admin") {
+      router.push("/admin/login")
+    } else if (userType === "company") {
       router.push("/company/login")
     } else {
       router.push("/student/login")

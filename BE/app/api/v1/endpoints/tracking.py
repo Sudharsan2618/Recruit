@@ -350,7 +350,19 @@ async def upload_resume(
         result = await analyze_resume(student_id, file_url, resume_text)
         result.pop("_id", None)
 
-        return {"success": True, "analysis": result}
+        # 4. Regenerate student embedding with new resume data
+        embedding_status = None
+        try:
+            from app.services.embedding_service import generate_student_embedding
+            emb_result = await generate_student_embedding(student_id)
+            embedding_status = emb_result.get("status") if emb_result else "no_data"
+            import logging
+            logging.getLogger(__name__).info(f"Resume embedding for student {student_id}: {embedding_status}")
+        except Exception as emb_err:
+            import logging
+            logging.getLogger(__name__).warning(f"Resume embedding failed for student {student_id}: {emb_err}")
+
+        return {"success": True, "analysis": result, "embedding_status": embedding_status}
     except HTTPException:
         raise
     except Exception as e:

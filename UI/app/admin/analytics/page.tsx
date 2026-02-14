@@ -137,8 +137,8 @@ export default function AnalyticsCenter() {
               <CardHeader>
                 <CardTitle className="text-base">Course Details</CardTitle>
               </CardHeader>
-              <CardContent className="p-0">
-                <Table>
+              <CardContent className="p-0 overflow-x-auto">
+                <Table className="min-w-[500px]">
                   <TableHeader>
                     <TableRow>
                       <TableHead>Course</TableHead>

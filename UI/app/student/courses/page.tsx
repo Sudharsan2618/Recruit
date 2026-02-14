@@ -94,25 +94,25 @@ export default function CourseCatalog() {
       </div>
 
       {/* Filters */}
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="relative flex-1 min-w-[200px]">
+      <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+        <div className="relative w-full sm:flex-1 sm:min-w-[200px]">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input placeholder="Search courses..." value={search} onChange={(e) => setSearch(e.target.value)} className="pl-10" />
         </div>
         <Select value={category} onValueChange={setCategory}>
-          <SelectTrigger className="w-[160px]"><SelectValue placeholder="Category" /></SelectTrigger>
+          <SelectTrigger className="w-full sm:w-[160px]"><SelectValue placeholder="Category" /></SelectTrigger>
           <SelectContent>
             {categoryOptions.map((c) => <SelectItem key={c} value={c}>{c}</SelectItem>)}
           </SelectContent>
         </Select>
         <Select value={level} onValueChange={setLevel}>
-          <SelectTrigger className="w-[160px]"><SelectValue placeholder="Level" /></SelectTrigger>
+          <SelectTrigger className="w-[calc(50%-4px)] sm:w-[160px]"><SelectValue placeholder="Level" /></SelectTrigger>
           <SelectContent>
             {levels.map((l) => <SelectItem key={l} value={l}>{l}</SelectItem>)}
           </SelectContent>
         </Select>
         <Select value={priceFilter} onValueChange={setPriceFilter}>
-          <SelectTrigger className="w-[120px]"><SelectValue placeholder="Price" /></SelectTrigger>
+          <SelectTrigger className="w-[calc(50%-4px)] sm:w-[120px]"><SelectValue placeholder="Price" /></SelectTrigger>
           <SelectContent>
             <SelectItem value="All">All</SelectItem>
             <SelectItem value="Free">Free</SelectItem>

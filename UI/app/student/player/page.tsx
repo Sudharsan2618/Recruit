@@ -569,7 +569,7 @@ export default function CoursePlayer() {
   return (
     <div className="flex h-screen flex-col bg-background">
       {/* Top bar - Production Grade Header */}
-      <header className="flex h-16 items-center gap-4 border-b border-border bg-card/50 backdrop-blur-md px-6 shrink-0 z-20">
+      <header className="flex h-14 items-center gap-2 border-b border-border bg-card/50 backdrop-blur-md px-3 shrink-0 z-20 sm:h-16 sm:gap-4 sm:px-6">
         <Button 
           variant="ghost" 
           size="icon" 
@@ -633,7 +633,7 @@ export default function CoursePlayer() {
 
       {/* Certificate Banner — shown when course is 100% complete */}
       {progressPercent >= 100 && (
-        <div className="flex items-center gap-3 border-b border-amber-200 bg-gradient-to-r from-amber-50 via-amber-50/80 to-yellow-50 dark:from-amber-950/30 dark:via-amber-900/20 dark:to-yellow-950/20 px-6 py-3 shrink-0 z-10">
+        <div className="flex flex-wrap items-center gap-2 border-b border-amber-200 bg-gradient-to-r from-amber-50 via-amber-50/80 to-yellow-50 dark:from-amber-950/30 dark:via-amber-900/20 dark:to-yellow-950/20 px-3 py-2 shrink-0 z-10 sm:flex-nowrap sm:gap-3 sm:px-6 sm:py-3">
           <Award className="h-5 w-5 text-amber-600 shrink-0" />
           <div className="flex-1 min-w-0">
             <p className="text-sm font-semibold text-foreground">Congratulations! You completed this course!</p>
@@ -877,7 +877,7 @@ export default function CoursePlayer() {
 
                     return (
                       <div className="flex-1 flex flex-col overflow-hidden">
-                        <div className="h-12 bg-muted flex items-center justify-between px-6 shrink-0 border-b border-border">
+                        <div className="h-12 bg-muted flex items-center justify-between px-3 sm:px-6 shrink-0 border-b border-border">
                           <div className="flex items-center gap-2">
                             <FileText className="w-4 h-4 text-primary" />
                             <span className="text-sm font-medium text-foreground">{currentLesson.title}</span>
@@ -965,7 +965,7 @@ export default function CoursePlayer() {
           {/* Lesson Info Area - Consistent with app design system */}
           {currentLesson?.content_type !== "quiz" && (
             <div className="bg-background border-t border-border">
-              <div className="max-w-5xl mx-auto px-6 py-8 lg:px-8">
+              <div className="max-w-5xl mx-auto px-3 py-6 sm:px-6 sm:py-8 lg:px-8">
                 <div className="flex flex-col lg:flex-row gap-8">
                   {/* Left: Lesson Details */}
                   <div className="flex-1 space-y-6">
@@ -1157,17 +1157,22 @@ export default function CoursePlayer() {
 
         {/* Premium Sidebar - Curriculum Panel */}
         {sidebarOpen && (
-          <aside className="w-[330px] flex flex-col border-l border-border/40 bg-gradient-to-b from-white to-slate-50/80 dark:from-slate-900 dark:to-slate-950 overflow-hidden shrink-0 z-10 animate-in slide-in-from-right duration-500 shadow-[-8px_0_30px_rgba(0,0,0,0.06)]">
+          <aside className="absolute inset-0 sm:relative sm:inset-auto w-full sm:w-[330px] flex flex-col border-l border-border/40 bg-gradient-to-b from-white to-slate-50/80 dark:from-slate-900 dark:to-slate-950 overflow-hidden shrink-0 z-30 sm:z-10 animate-in slide-in-from-right duration-500 shadow-[-8px_0_30px_rgba(0,0,0,0.06)]">
             {/* Sidebar Header */}
-            <div className="px-7 pt-7 pb-5 border-b border-border/30">
+            <div className="px-4 pt-4 pb-4 border-b border-border/30 sm:px-7 sm:pt-7 sm:pb-5">
               <div className="flex items-center justify-between mb-4">
                 <div>
                   <p className="text-[10px] font-bold text-primary uppercase tracking-[0.2em] mb-1">Course Content</p>
                   <h4 className="text-lg font-extrabold text-foreground tracking-tight">Curriculum</h4>
                 </div>
-                <Badge variant="outline" className="text-[10px] font-bold border-primary/20 text-primary bg-primary/5 uppercase py-1.5 px-3 rounded-full">
-                  {totalLessons} Lessons
-                </Badge>
+                <div className="flex items-center gap-2">
+                  <Badge variant="outline" className="text-[10px] font-bold border-primary/20 text-primary bg-primary/5 uppercase py-1.5 px-3 rounded-full">
+                    {totalLessons} Lessons
+                  </Badge>
+                  <Button variant="ghost" size="icon" className="sm:hidden h-8 w-8 rounded-full" onClick={() => setSidebarOpen(false)}>
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
               </div>
               {/* Mini progress bar in header */}
               <div className="flex items-center gap-3">

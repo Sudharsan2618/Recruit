@@ -175,14 +175,14 @@ function JobsListView({ onSelectJob }: { onSelectJob: (job: AdminJob) => void })
 
       {/* Jobs table */}
       <Card>
-        <CardContent className="p-0">
+        <CardContent className="p-0 overflow-x-auto">
           {loading ? (
             <div className="flex items-center justify-center py-12">
               <Loader2 className="h-5 w-5 animate-spin text-primary mr-2" />
               <span className="text-sm text-muted-foreground">Loading...</span>
             </div>
           ) : (
-            <Table>
+            <Table className="min-w-[700px]">
               <TableHeader>
                 <TableRow>
                   <TableHead>Job</TableHead>
@@ -462,14 +462,14 @@ function ApplicantsView({ job, onBack }: { job: AdminJob; onBack: () => void }) 
 
       {/* Applicants table */}
       <Card>
-        <CardContent className="p-0">
+        <CardContent className="p-0 overflow-x-auto">
           {loading ? (
             <div className="flex items-center justify-center py-12">
               <Loader2 className="h-5 w-5 animate-spin text-primary mr-2" />
               <span className="text-sm text-muted-foreground">Loading applicants...</span>
             </div>
           ) : (
-            <Table>
+            <Table className="min-w-[700px]">
               <TableHeader>
                 <TableRow>
                   <TableHead className="w-10">

@@ -146,7 +146,7 @@ export function PortalShell({ children, portalName, navItems, portalColor, showN
         <header className="hidden lg:flex h-14 items-center justify-end border-b border-border bg-card px-6">
           {showNotifications && <NotificationBell />}
         </header>
-        <main className="flex-1 overflow-y-auto bg-background p-6">
+        <main className="flex-1 overflow-y-auto bg-background p-3 sm:p-4 lg:p-6">
           {children}
         </main>
       </div>

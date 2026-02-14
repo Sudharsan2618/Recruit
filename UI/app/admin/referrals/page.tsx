@@ -123,8 +123,8 @@ export default function AdminReferralsPage() {
           <CardHeader>
             <CardTitle className="text-base">Top Referrers</CardTitle>
           </CardHeader>
-          <CardContent>
-            <Table>
+          <CardContent className="overflow-x-auto">
+            <Table className="min-w-[500px]">
               <TableHeader>
                 <TableRow>
                   <TableHead>Student</TableHead>
@@ -198,8 +198,8 @@ export default function AdminReferralsPage() {
         </div>
 
         <Card>
-          <CardContent className="p-0">
-            <Table>
+          <CardContent className="p-0 overflow-x-auto">
+            <Table className="min-w-[500px]">
               <TableHeader>
                 <TableRow>
                   <TableHead>Package</TableHead>
@@ -237,8 +237,8 @@ export default function AdminReferralsPage() {
             View All <ArrowUpRight className="h-3 w-3" />
           </Button>
         </CardHeader>
-        <CardContent>
-          <Table>
+        <CardContent className="overflow-x-auto">
+          <Table className="min-w-[600px]">
             <TableHeader>
               <TableRow>
                 <TableHead>Referred By</TableHead>

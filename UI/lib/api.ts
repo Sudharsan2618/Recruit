@@ -1436,3 +1436,93 @@ export async function getMyCertificates(): Promise<{ certificates: Certificate[]
 export function getCertificateViewUrl(enrollmentId: number): string {
   return `${API_BASE}/certificates/view/${enrollmentId}`;
 }
+
+
+// ── Razorpay Payments ──
+
+export interface PaymentOrderResponse {
+  order_id: string;
+  amount: number;         // in paise (₹499 = 49900)
+  currency: string;
+  key_id: string;
+  payment_id: number;     // our internal DB payment ID
+  course_title: string;
+  course_id: number;
+}
+
+export interface VerifyPaymentResponse {
+  success: boolean;
+  message: string;
+  payment_id: number;
+  enrollment_id: number;
+  course_slug: string;
+}
+
+export interface PaymentRecord {
+  payment_id: number;
+  payment_type: string;
+  amount: string;
+  currency: string;
+  tax_amount: string;
+  tax_percentage: string;
+  total_amount: string;
+  status: string;
+  gateway_name: string | null;
+  gateway_payment_id: string | null;
+  gateway_order_id: string | null;
+  invoice_number: string | null;
+  reference_type: string | null;
+  reference_id: number | null;
+  created_at: string;
+  completed_at: string | null;
+  reference_title: string | null;
+}
+
+export interface PaymentHistoryResponse {
+  payments: PaymentRecord[];
+  total: number;
+}
+
+/** Create a Razorpay order for a paid course */
+export async function createPaymentOrder(courseId: number): Promise<PaymentOrderResponse> {
+  return fetchApiWithAuth<PaymentOrderResponse>("/payments/create-order", {
+    method: "POST",
+    body: { course_id: courseId },
+  });
+}
+
+/** Verify Razorpay payment after checkout success */
+export async function verifyPayment(
+  razorpayPaymentId: string,
+  razorpayOrderId: string,
+  razorpaySignature: string
+): Promise<VerifyPaymentResponse> {
+  return fetchApiWithAuth<VerifyPaymentResponse>("/payments/verify", {
+    method: "POST",
+    body: {
+      razorpay_payment_id: razorpayPaymentId,
+      razorpay_order_id: razorpayOrderId,
+      razorpay_signature: razorpaySignature,
+    },
+  });
+}
+
+/** Get payment history for the current user */
+export async function getPaymentHistory(): Promise<PaymentHistoryResponse> {
+  return fetchApiWithAuth<PaymentHistoryResponse>("/payments/history");
+}
+
+/** Load Razorpay Checkout JS SDK dynamically */
+export function loadRazorpayScript(): Promise<boolean> {
+  return new Promise((resolve) => {
+    if (typeof window === "undefined") return resolve(false);
+    if ((window as any).Razorpay) return resolve(true);
+
+    const script = document.createElement("script");
+    script.src = "https://checkout.razorpay.com/v1/checkout.js";
+    script.async = true;
+    script.onload = () => resolve(true);
+    script.onerror = () => resolve(false);
+    document.body.appendChild(script);
+  });
+}

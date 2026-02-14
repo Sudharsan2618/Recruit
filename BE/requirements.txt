@@ -39,3 +39,6 @@ PyPDF2==3.0.1
 
 # Vector DB Support
 pgvector==0.3.6
+
+# Payment Gateway
+razorpay==1.4.2

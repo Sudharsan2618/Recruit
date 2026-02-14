@@ -8,15 +8,6 @@ import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
 import { Separator } from "@/components/ui/separator"
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
-import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import {
   ArrowLeft,
   BookOpen,
   CheckCircle2,
@@ -33,6 +24,7 @@ import {
   HelpCircle,
   Shield,
   Award,
+  AlertCircle,
 } from "lucide-react"
 import Link from "next/link"
 import {
@@ -42,6 +34,9 @@ import {
   trackActivity,
   issueCertificate,
   getCertificateViewUrl,
+  createPaymentOrder,
+  verifyPayment,
+  loadRazorpayScript,
   type CourseDetail,
   type EnrollmentOut,
 } from "@/lib/api"
@@ -67,9 +62,8 @@ export default function CourseDetailPage() {
   const [enrolling, setEnrolling] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [expandedModules, setExpandedModules] = useState<number[]>([])
-  const [showPayment, setShowPayment] = useState(false)
   const [paymentProcessing, setPaymentProcessing] = useState(false)
-  const [paymentSuccess, setPaymentSuccess] = useState(false)
+  const [paymentError, setPaymentError] = useState<string | null>(null)
   const [certLoading, setCertLoading] = useState(false)
 
   useEffect(() => {
@@ -124,8 +118,8 @@ export default function CourseDetailPage() {
     const isFree = course.pricing_model === "free" || price === 0
 
     if (!isFree) {
-      // Show mock payment dialog for paid courses
-      setShowPayment(true)
+      // Start Razorpay payment flow
+      await handleRazorpayPayment()
       return
     }
 
@@ -149,35 +143,86 @@ export default function CourseDetailPage() {
     }
   }
 
-  async function handleMockPayment() {
+  async function handleRazorpayPayment() {
     if (!user?.student_id || !course) return
 
     setPaymentProcessing(true)
-    // Simulate payment processing
-    await new Promise((resolve) => setTimeout(resolve, 2000))
-    setPaymentSuccess(true)
+    setPaymentError(null)
 
-    // After payment success, enroll
     try {
-      const result = await enrollInCourse(course.course_id, user.student_id)
-      setEnrollment(result)
+      // 1. Load Razorpay Checkout JS SDK
+      const loaded = await loadRazorpayScript()
+      if (!loaded) {
+        setPaymentError("Failed to load payment gateway. Please refresh and try again.")
+        setPaymentProcessing(false)
+        return
+      }
 
-      // Track Activity: Course Enrolled (Paid)
-      trackActivity({
-        student_id: user.student_id,
-        course_id: course.course_id,
-        activity_type: "course_enrolled"
-      }).catch(console.warn)
+      // 2. Create order on our backend
+      const orderData = await createPaymentOrder(course.course_id)
+
+      // 3. Open Razorpay Checkout popup
+      const options = {
+        key: orderData.key_id,
+        amount: orderData.amount,
+        currency: orderData.currency,
+        name: "RecruitLMS",
+        description: orderData.course_title,
+        order_id: orderData.order_id,
+        prefill: {
+          name: user.first_name ? `${user.first_name} ${user.last_name || ""}`.trim() : "",
+          email: user.email || "",
+        },
+        theme: {
+          color: "#6366f1",    // Indigo to match app theme
+        },
+        handler: async (response: { razorpay_payment_id: string; razorpay_order_id: string; razorpay_signature: string }) => {
+          // 4. Verify payment on our backend
+          try {
+            const result = await verifyPayment(
+              response.razorpay_payment_id,
+              response.razorpay_order_id,
+              response.razorpay_signature,
+            )
+
+            if (result.success) {
+              // Refresh enrollment data
+              const enrolls = await getEnrollments(user.student_id!)
+              const newEnrollment = enrolls.find((e) => e.course_id === course.course_id)
+              if (newEnrollment) setEnrollment(newEnrollment)
+
+              // Track Activity
+              trackActivity({
+                student_id: user.student_id!,
+                course_id: course.course_id,
+                activity_type: "course_enrolled"
+              }).catch(console.warn)
+            }
+          } catch (err) {
+            setPaymentError(err instanceof Error ? err.message : "Payment verification failed")
+          }
+          setPaymentProcessing(false)
+        },
+        modal: {
+          ondismiss: () => {
+            setPaymentProcessing(false)
+          },
+        },
+      }
+
+      const rzp = new (window as any).Razorpay(options)
+      rzp.on("payment.failed", (response: any) => {
+        setPaymentError(
+          response.error?.description || "Payment failed. Please try again."
+        )
+        setPaymentProcessing(false)
+      })
+      rzp.open()
 
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to enroll after payment")
-    }
-
-    setTimeout(() => {
-      setShowPayment(false)
+      setPaymentError(err instanceof Error ? err.message : "Failed to initiate payment")
       setPaymentProcessing(false)
-      setPaymentSuccess(false)
-    }, 1500)
+    }
   }
 
   if (loading) {
@@ -417,26 +462,39 @@ export default function CourseDetailPage() {
                   </Button>
                 </div>
               ) : (
-                <Button
-                  size="lg"
-                  className="w-full"
-                  onClick={handleEnroll}
-                  disabled={enrolling}
-                >
-                  {enrolling ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Enrolling...
-                    </>
-                  ) : isFree ? (
-                    "Enroll for Free"
-                  ) : (
-                    <>
-                      <CreditCard className="mr-2 h-4 w-4" />
-                      Enroll Now — ₹{price.toLocaleString()}
-                    </>
+                <div className="flex flex-col gap-3">
+                  <Button
+                    size="lg"
+                    className="w-full"
+                    onClick={handleEnroll}
+                    disabled={enrolling || paymentProcessing}
+                  >
+                    {enrolling || paymentProcessing ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        {paymentProcessing ? "Processing Payment..." : "Enrolling..."}
+                      </>
+                    ) : isFree ? (
+                      "Enroll for Free"
+                    ) : (
+                      <>
+                        <CreditCard className="mr-2 h-4 w-4" />
+                        Enroll Now — ₹{price.toLocaleString()}
+                      </>
+                    )}
+                  </Button>
+                  {!isFree && (
+                    <p className="text-[10px] text-center text-muted-foreground">
+                      🧪 Test Mode — Use card <code className="bg-muted px-1 py-0.5 rounded text-[10px]">4111 1111 1111 1111</code>
+                    </p>
                   )}
-                </Button>
+                  {paymentError && (
+                    <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50/50 dark:bg-red-950/10 px-3 py-2">
+                      <AlertCircle className="h-4 w-4 text-red-500 shrink-0 mt-0.5" />
+                      <p className="text-xs text-red-600">{paymentError}</p>
+                    </div>
+                  )}
+                </div>
               )}
 
               <Separator />
@@ -471,75 +529,7 @@ export default function CourseDetailPage() {
           </Card>
         </div>
       </div>
-
-      {/* Mock Payment Dialog */}
-      <Dialog open={showPayment} onOpenChange={setShowPayment}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Complete Payment</DialogTitle>
-            <DialogDescription>
-              {paymentSuccess
-                ? "Payment successful! Enrolling you now..."
-                : `Pay ₹${price.toLocaleString()} for "${course.title}"`
-              }
-            </DialogDescription>
-          </DialogHeader>
-
-          {paymentSuccess ? (
-            <div className="flex flex-col items-center gap-3 py-6">
-              <CheckCircle2 className="h-12 w-12 text-emerald-600" />
-              <p className="font-semibold text-foreground">Payment Successful!</p>
-            </div>
-          ) : (
-            <div className="flex flex-col gap-4 py-2">
-              <div className="rounded-lg border border-border bg-muted/50 p-3">
-                <div className="flex justify-between text-sm">
-                  <span className="text-muted-foreground">Course</span>
-                  <span className="font-medium text-foreground">{course.title}</span>
-                </div>
-                <div className="flex justify-between text-sm mt-1">
-                  <span className="text-muted-foreground">Amount</span>
-                  <span className="font-bold text-foreground">₹{price.toLocaleString()}</span>
-                </div>
-              </div>
-
-              <div className="flex flex-col gap-1.5">
-                <Label>Card Number</Label>
-                <Input placeholder="4242 4242 4242 4242" defaultValue="4242 4242 4242 4242" disabled={paymentProcessing} />
-              </div>
-              <div className="grid grid-cols-2 gap-3">
-                <div className="flex flex-col gap-1.5">
-                  <Label>Expiry</Label>
-                  <Input placeholder="12/28" defaultValue="12/28" disabled={paymentProcessing} />
-                </div>
-                <div className="flex flex-col gap-1.5">
-                  <Label>CVC</Label>
-                  <Input placeholder="123" defaultValue="123" disabled={paymentProcessing} />
-                </div>
-              </div>
-
-              <p className="text-[10px] text-muted-foreground text-center">
-                🧪 This is a mock payment — no real charges will be made.
-              </p>
-
-              <Button
-                onClick={handleMockPayment}
-                disabled={paymentProcessing}
-                className="w-full"
-              >
-                {paymentProcessing ? (
-                  <>
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                    Processing...
-                  </>
-                ) : (
-                  `Pay ₹${price.toLocaleString()}`
-                )}
-              </Button>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
     </div>
   )
 }
+

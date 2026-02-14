@@ -39,6 +39,10 @@ class Settings(BaseSettings):
     # ── Frontend (CORS) ──
     FRONTEND_URL: str = os.getenv("FRONTEND_URL")
 
+    # ── Razorpay (Payment Gateway) ──
+    RAZORPAY_KEY_ID: str = os.getenv("RAZORPAY_KEY_ID", "")
+    RAZORPAY_KEY_SECRET: str = os.getenv("RAZORPAY_KEY_SECRET", "")
+
     @property
     def DATABASE_URL(self) -> str:
         return (

@@ -1,4 +1,4 @@
-"""Pydantic schemas for student-facing job endpoints."""
+"""Pydantic schemas for student-facing job endpoints with hybrid matching."""
 
 from datetime import datetime
 from decimal import Decimal
@@ -13,6 +13,51 @@ class SkillBrief(BaseModel):
     name: str
     is_mandatory: bool = True
     min_experience_years: Optional[int] = None
+
+
+# ── Match breakdown schemas ──────────────────────────────────────────────
+
+class MatchBreakdown(BaseModel):
+    """Per-signal breakdown of the composite match score."""
+    composite_score: float
+    vector_score: float
+    skill_score: Optional[float] = None       # None if job has no skills defined
+    experience_score: float
+    preference_score: float
+
+
+class MatchedSkill(BaseModel):
+    """A skill the student has that matches a job requirement."""
+    skill_name: str
+    is_mandatory: bool = True
+    proficiency_level: int = 0
+    years_of_experience: float = 0.0
+
+
+class MissingSkill(BaseModel):
+    """A job-required skill the student does not have."""
+    skill_name: str
+    is_mandatory: bool = True
+
+
+class SkillSummary(BaseModel):
+    """Summary counts for skill overlap."""
+    total: int = 0
+    mandatory_matched: int = 0
+    mandatory_total: int = 0
+    optional_matched: int = 0
+    optional_total: int = 0
+
+
+class GapCourse(BaseModel):
+    """A course that teaches a missing skill."""
+    course_id: int
+    title: str
+    slug: str
+    price: float = 0
+    currency: str = "INR"
+    thumbnail_url: Optional[str] = None
+    teaches_skills: list[str] = []
 
 
 # ── Company brief (shown on job cards) ───────────────────────────────────
@@ -47,6 +92,9 @@ class JobListItem(BaseModel):
     department: Optional[str] = None
     applications_count: int = 0
     match_score: Optional[float] = None
+    match_breakdown: Optional[MatchBreakdown] = None
+    matched_skills: list[MatchedSkill] = []
+    missing_skills: list[MissingSkill] = []
     skills: list[SkillBrief] = []
     company: CompanyBrief
 
@@ -85,6 +133,11 @@ class JobDetail(BaseModel):
     deadline: Optional[datetime] = None
     applications_count: int = 0
     match_score: Optional[float] = None
+    match_breakdown: Optional[MatchBreakdown] = None
+    matched_skills: list[MatchedSkill] = []
+    missing_skills: list[MissingSkill] = []
+    skill_summary: Optional[SkillSummary] = None
+    gap_courses: list[GapCourse] = []
     has_applied: bool = False
     skills: list[SkillBrief] = []
     company: CompanyDetail

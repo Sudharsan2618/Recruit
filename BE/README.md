@@ -88,7 +88,7 @@ python -m scripts.upload_seed_assets
 ### 6. Run the Server
 
 ```bash
-uvicorn app.main:app --reload --port 8000
+uvicorn app.main:app --reload --port 8080
 ```
 
 ## API Endpoints

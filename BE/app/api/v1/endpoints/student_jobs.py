@@ -8,13 +8,14 @@ from sqlalchemy import text
 from datetime import datetime
 
 from app.db.postgres import get_db
-from app.services.matching_service import MatchingService
+from app.services.matching_service import MatchingService, COMPOSITE_THRESHOLD
 from app.services.auth_service import decode_access_token
 from app.api.v1.endpoints.notifications import create_notification
 from app.schemas.student_jobs import (
     JobListItem, JobListResponse, RecommendedJobsResponse,
     JobDetail, CompanyBrief, CompanyDetail, SkillBrief,
     ApplyRequest, ApplicationOut, MyApplicationsResponse,
+    MatchBreakdown, MatchedSkill, MissingSkill, SkillSummary, GapCourse,
 )
 
 router = APIRouter(prefix="/student-jobs", tags=["Student Jobs"])
@@ -47,6 +48,16 @@ async def _get_student_id(db: AsyncSession, user_id: int) -> int:
 
 def _build_job_list_item(job: dict) -> JobListItem:
     """Convert a raw query dict to a JobListItem schema."""
+    # Build match breakdown if available
+    breakdown_data = job.get("match_breakdown")
+    match_breakdown = None
+    if breakdown_data and isinstance(breakdown_data, dict):
+        match_breakdown = MatchBreakdown(**breakdown_data)
+
+    # Build matched/missing skills
+    matched_skills = [MatchedSkill(**s) for s in job.get("matched_skills", [])]
+    missing_skills = [MissingSkill(**s) for s in job.get("missing_skills", [])]
+
     return JobListItem(
         job_id=job["job_id"],
         title=job["title"],
@@ -67,6 +78,9 @@ def _build_job_list_item(job: dict) -> JobListItem:
         department=job.get("department"),
         applications_count=job.get("applications_count", 0),
         match_score=job.get("match_score"),
+        match_breakdown=match_breakdown,
+        matched_skills=matched_skills,
+        missing_skills=missing_skills,
         skills=[SkillBrief(**s) for s in job.get("skills", [])],
         company=CompanyBrief(
             company_id=job["company_id"],
@@ -82,19 +96,22 @@ def _build_job_list_item(job: dict) -> JobListItem:
 
 @router.get("/recommended", response_model=RecommendedJobsResponse)
 async def get_recommended_jobs(
-    limit: int = Query(20, ge=1, le=50),
+    limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
     user: dict = Depends(_get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Get AI-recommended jobs for the authenticated student based on embedding similarity."""
+    """
+    Get AI-recommended jobs using hybrid matching.
+    Returns ALL jobs whose composite score >= 65% (vector 35% + skills 35% + experience 20% + preferences 10%).
+    """
     student_id = await _get_student_id(db, user["user_id"])
     svc = MatchingService(db)
     jobs = await svc.get_recommended_jobs_for_student(student_id, limit=limit, offset=offset)
     items = [_build_job_list_item(j) for j in jobs]
     return RecommendedJobsResponse(
         jobs=items,
-        threshold=0.65,
+        threshold=COMPOSITE_THRESHOLD,
         total=len(items),
     )
 
@@ -112,7 +129,7 @@ async def get_all_jobs(
     user: dict = Depends(_get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Browse all active jobs with optional filters. Includes match score if student has embedding."""
+    """Browse all active jobs with optional filters. Includes composite match score if student has embedding."""
     student_id = await _get_student_id(db, user["user_id"])
     svc = MatchingService(db)
     jobs = await svc.get_all_active_jobs(
@@ -185,7 +202,7 @@ async def get_job_detail(
     user: dict = Depends(_get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Get full job detail with match score and application status."""
+    """Get full job detail with composite match breakdown, skill gaps, and course recommendations."""
     student_id = await _get_student_id(db, user["user_id"])
     svc = MatchingService(db)
     job = await svc.get_job_detail(job_id, student_id=student_id)
@@ -193,6 +210,17 @@ async def get_job_detail(
         raise HTTPException(status_code=404, detail="Job not found")
 
     has_applied = await svc.check_student_applied(student_id, job_id)
+
+    # Build match breakdown
+    breakdown_data = job.get("match_breakdown")
+    match_breakdown = MatchBreakdown(**breakdown_data) if breakdown_data and isinstance(breakdown_data, dict) else None
+
+    # Build skill summary
+    summary_data = job.get("skill_summary")
+    skill_summary = SkillSummary(**summary_data) if summary_data and isinstance(summary_data, dict) else None
+
+    # Build gap courses
+    gap_courses = [GapCourse(**gc) for gc in job.get("gap_courses", [])]
 
     return JobDetail(
         job_id=job["job_id"],
@@ -217,6 +245,11 @@ async def get_job_detail(
         deadline=job.get("deadline"),
         applications_count=job.get("applications_count", 0),
         match_score=job.get("match_score"),
+        match_breakdown=match_breakdown,
+        matched_skills=[MatchedSkill(**s) for s in job.get("matched_skills", [])],
+        missing_skills=[MissingSkill(**s) for s in job.get("missing_skills", [])],
+        skill_summary=skill_summary,
+        gap_courses=gap_courses,
         has_applied=has_applied,
         skills=[SkillBrief(**s) for s in job.get("skills", [])],
         company=CompanyDetail(
@@ -263,17 +296,10 @@ async def apply_to_job(
     if existing.scalar_one_or_none():
         raise HTTPException(status_code=409, detail="You have already applied to this job")
 
-    # Compute match score for admin reference
-    match_score_result = await db.execute(
-        text("""
-            SELECT ROUND((1.0 - (je.embedding <=> se.embedding))::numeric, 4) AS score
-            FROM job_embeddings je, student_embeddings se
-            WHERE je.job_id = :jid AND se.student_id = :sid
-        """),
-        {"jid": job_id, "sid": student_id},
-    )
-    match_row = match_score_result.mappings().first()
-    admin_match_score = float(match_row["score"]) * 100 if match_row and match_row["score"] else None
+    # Compute composite match score for admin reference
+    svc = MatchingService(db)
+    composite_score = await svc.compute_composite_for_application(student_id, job_id)
+    admin_match_score = round(composite_score * 100, 2) if composite_score is not None else None
 
     # Insert application
     now = datetime.utcnow()

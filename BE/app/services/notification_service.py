@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from typing import Any, Optional
 
 from app.db.mongodb import get_mongodb, to_bson_datetime
+from app.services.novu_service import trigger_novu_notification
 
 
 async def create_notification(
@@ -13,8 +14,10 @@ async def create_notification(
     title: str,
     body: str,
     *,
+    email: Optional[str] = None,
     channel: str = "in_app",
     metadata: Optional[dict[str, Any]] = None,
+    workflow_id: str = "onboarding-demo-workflow",
 ) -> str:
     """
     Create a notification job in MongoDB notification_queue.
@@ -34,21 +37,31 @@ async def create_notification(
     now = to_bson_datetime(datetime.now(timezone.utc))
     nid = str(uuid.uuid4())
 
+    # Create payload matching Novu-style and local schema requirements
+    payload = metadata or {}
+    payload.update({
+        "title": title,
+        "body": body,
+        "type": notification_type
+    })
+
     doc = {
         "notification_id": nid,
         "user_id": user_id,
-        "type": notification_type,
+        "notification_type": notification_type,
         "channel": channel,
-        "title": title,
-        "body": body,
+        "payload": payload,
         "status": "pending",
         "read": False,
         "created_at": now,
         "updated_at": now,
-        "metadata": metadata or {},
     }
 
     await db["notification_queue"].insert_one(doc)
+
+    # ── Trigger Novu ──
+    trigger_novu_notification(user_id, workflow_id, payload, email=email)
+
     return nid
 
 

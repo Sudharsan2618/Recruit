@@ -821,6 +821,44 @@ export interface SkillBrief {
   min_experience_years: number | null;
 }
 
+export interface MatchBreakdown {
+  composite_score: number;
+  vector_score: number;
+  skill_score: number | null;
+  experience_score: number;
+  preference_score: number;
+}
+
+export interface MatchedSkill {
+  skill_name: string;
+  is_mandatory: boolean;
+  proficiency_level: number;
+  years_of_experience: number;
+}
+
+export interface MissingSkill {
+  skill_name: string;
+  is_mandatory: boolean;
+}
+
+export interface SkillSummary {
+  total: number;
+  mandatory_matched: number;
+  mandatory_total: number;
+  optional_matched: number;
+  optional_total: number;
+}
+
+export interface GapCourse {
+  course_id: number;
+  title: string;
+  slug: string;
+  price: number;
+  currency: string;
+  thumbnail_url: string | null;
+  teaches_skills: string[];
+}
+
 export interface CompanyBrief {
   company_id: number;
   company_name: string;
@@ -849,6 +887,9 @@ export interface JobListItem {
   department: string | null;
   applications_count: number;
   match_score: number | null;
+  match_breakdown: MatchBreakdown | null;
+  matched_skills: MatchedSkill[];
+  missing_skills: MissingSkill[];
   skills: SkillBrief[];
   company: CompanyBrief;
 }
@@ -882,6 +923,11 @@ export interface JobDetailFull {
   deadline: string | null;
   applications_count: number;
   match_score: number | null;
+  match_breakdown: MatchBreakdown | null;
+  matched_skills: MatchedSkill[];
+  missing_skills: MissingSkill[];
+  skill_summary: SkillSummary | null;
+  gap_courses: GapCourse[];
   has_applied: boolean;
   skills: SkillBrief[];
   company: CompanyDetail;
@@ -908,8 +954,8 @@ export interface ApplyPayload {
   notice_period_days?: number;
 }
 
-/** Get AI-recommended jobs for authenticated student */
-export async function getRecommendedJobs(limit = 20): Promise<{ jobs: JobListItem[]; threshold: number; total: number }> {
+/** Get AI-recommended jobs for authenticated student (hybrid matching, all >= 65% composite) */
+export async function getRecommendedJobs(limit = 50): Promise<{ jobs: JobListItem[]; threshold: number; total: number }> {
   return fetchApiWithAuth(`/student-jobs/recommended?limit=${limit}`);
 }
 
@@ -932,7 +978,7 @@ export async function getStudentJobs(params: {
   return fetchApiWithAuth(`/student-jobs?${query.toString()}`);
 }
 
-/** Get full job detail */
+/** Get full job detail with match breakdown, skill gaps, and course recommendations */
 export async function getJobDetail(jobId: number): Promise<JobDetailFull> {
   return fetchApiWithAuth(`/student-jobs/${jobId}`);
 }
@@ -1193,6 +1239,9 @@ export interface JobApplicant {
   email: string;
   user_id: number;
   match_score: number;
+  match_breakdown: MatchBreakdown | null;
+  matched_skills: MatchedSkill[];
+  missing_skills: MissingSkill[];
   skills: string[];
 }
 

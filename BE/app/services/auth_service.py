@@ -13,6 +13,9 @@ from app.config import settings
 from app.models.user import User, Student, Company
 from app.models.course import Enrollment, Course, LessonProgress, Lesson
 
+import logging
+logger = logging.getLogger(__name__)
+
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 
@@ -158,6 +161,20 @@ class AuthService:
         self.db.add(student)
         await self.db.flush()
 
+        # Trigger Welcome Notification (Email + In-App)
+        try:
+            from app.services.notification_service import create_notification
+            await create_notification(
+                user_id=user.user_id,
+                email=email,
+                notification_type="welcome",
+                title="Welcome to SkillBridge! 🎉",
+                body=f"Hi {first_name}, thank you for joining our platform. We're excited to help you grow your career!",
+                workflow_id="onboarding-demo-workflow"
+            )
+        except Exception as e:
+            logger.warning(f"Registration notification failed: {e}")
+
         # Reload with relationships
         await self.db.refresh(user, ["student", "company"])
         return _build_user_data(user)
@@ -192,6 +209,20 @@ class AuthService:
         )
         self.db.add(company)
         await self.db.flush()
+
+        # Trigger Welcome Notification (Email + In-App)
+        try:
+            from app.services.notification_service import create_notification
+            await create_notification(
+                user_id=user.user_id,
+                email=email,
+                notification_type="welcome",
+                title="Welcome to SkillBridge for Business! 🏢",
+                body=f"Hi {company_name}, thank you for joining. Start posting jobs and finding top talent today!",
+                workflow_id="onboarding-demo-workflow"
+            )
+        except Exception as e:
+            logger.warning(f"Registration notification failed: {e}")
 
         await self.db.refresh(user, ["student", "company"])
         return _build_user_data(user)

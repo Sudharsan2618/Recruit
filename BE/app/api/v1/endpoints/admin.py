@@ -9,6 +9,7 @@ from sqlalchemy import text
 
 from app.db.postgres import get_db
 from app.services.auth_service import decode_access_token
+from app.services.matching_service import MatchingService
 from app.api.v1.endpoints.notifications import create_notification
 
 router = APIRouter(prefix="/admin", tags=["Admin"])
@@ -539,7 +540,7 @@ async def get_job_applicants(
     job_id: int,
     search: str = Query(""),
     status: str = Query("all", description="all, pending_admin_review, admin_shortlisted, forwarded_to_company, etc."),
-    min_match: float = Query(0, ge=0, le=100, description="Minimum match percentage"),
+    min_match: float = Query(0, ge=0, le=100, description="Minimum composite match percentage"),
     sort_by: str = Query("match_score", description="match_score, applied_at, name"),
     sort_order: str = Query("desc"),
     limit: int = Query(50, ge=1, le=200),
@@ -547,9 +548,16 @@ async def get_job_applicants(
     admin: dict = Depends(_require_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    """Get all applicants for a specific job with match scores and student details."""
-    # Verify job exists
-    job_check = await db.execute(text("SELECT job_id, title FROM jobs WHERE job_id = :jid"), {"jid": job_id})
+    """Get all applicants for a specific job with composite match scores and skill breakdowns."""
+    # Verify job exists and get job data for computing scores
+    job_check = await db.execute(
+        text("""
+            SELECT j.job_id, j.title, j.experience_min_years, j.experience_max_years,
+                   j.remote_type, j.employment_type, j.location
+            FROM jobs j WHERE j.job_id = :jid
+        """),
+        {"jid": job_id},
+    )
     job_row = job_check.mappings().first()
     if not job_row:
         raise HTTPException(status_code=404, detail="Job not found")
@@ -571,24 +579,6 @@ async def get_job_applicants(
 
     where_sql = " AND ".join(where_clauses)
 
-    # Match score computation
-    score_select = """
-        ROUND(
-            COALESCE(
-                (1.0 - (je.embedding <=> se.embedding))::numeric * 100,
-                0
-            ), 1
-        ) AS match_score
-    """
-
-    allowed_sorts = {
-        "match_score": "match_score",
-        "applied_at": "a.applied_at",
-        "name": "s.first_name",
-    }
-    sort_col = allowed_sorts.get(sort_by, "match_score")
-    sort_dir = "ASC" if sort_order == "asc" else "DESC"
-
     # Count
     count_q = await db.execute(
         text(f"""
@@ -602,7 +592,7 @@ async def get_job_applicants(
     )
     total = count_q.scalar() or 0
 
-    # Data with match scores
+    # Data — fetch applicants with vector score + student data for composite computation
     data_q = await db.execute(
         text(f"""
             SELECT
@@ -610,45 +600,118 @@ async def get_job_applicants(
                 a.cover_letter, a.resume_url, a.expected_salary, a.notice_period_days,
                 a.applied_at, a.admin_notes, a.admin_match_score,
                 s.first_name, s.last_name, s.headline, s.profile_picture_url,
-                s.location AS current_location, s.experience_years * 12 AS total_experience_months,
+                s.location AS current_location, s.experience_years,
                 s.resume_url AS student_resume_url,
                 s.linkedin_url, s.github_url, s.portfolio_url,
+                s.preferred_job_types, s.preferred_remote_types, s.preferred_locations,
                 u.email, u.user_id,
-                {score_select}
+                ROUND(
+                    COALESCE(
+                        (1.0 - (je.embedding <=> se.embedding))::numeric,
+                        0
+                    ), 4
+                ) AS vector_score
             FROM applications a
             JOIN students s ON s.student_id = a.student_id
             JOIN users u ON u.user_id = s.user_id
             LEFT JOIN job_embeddings je ON je.job_id = a.job_id
             LEFT JOIN student_embeddings se ON se.student_id = a.student_id
             WHERE {where_sql}
-            {"AND ROUND(COALESCE((1.0 - (je.embedding <=> se.embedding))::numeric * 100, 0), 1) >= :min_match" if min_match > 0 else ""}
-            ORDER BY {sort_col} {sort_dir} NULLS LAST
+            ORDER BY a.applied_at DESC
             LIMIT :limit OFFSET :offset
         """),
-        {**params, **({"min_match": min_match} if min_match > 0 else {})},
+        params,
     )
     rows = data_q.mappings().all()
+
+    if not rows:
+        return {"applicants": [], "total": total, "job": {"job_id": job_row["job_id"], "title": job_row["title"]}}
+
+    # Use MatchingService for skill overlap computation
+    svc = MatchingService(db)
+    student_ids = [r["student_id"] for r in rows]
+
+    # Pre-compute skill overlap for all applicants at once (batch)
+    all_skill_data = {}
+    for r in rows:
+        sid = r["student_id"]
+        skill_results = await svc._compute_skill_overlap(sid, [job_id])
+        all_skill_data[sid] = skill_results.get(job_id, {
+            "skill_score": None, "matched_skills": [], "missing_skills": [],
+            "total_skills": 0, "mandatory_matched": 0, "mandatory_total": 0,
+            "optional_matched": 0, "optional_total": 0,
+        })
 
     applicants = []
     for r in rows:
         app = dict(r)
-        app["match_score"] = float(app["match_score"]) if app["match_score"] else 0
+        sid = r["student_id"]
+        student_exp = r["experience_years"] or 0
+
+        # Compute the 4 signals
+        vector_score = float(r["vector_score"]) if r["vector_score"] else 0.0
+        skill_data = all_skill_data.get(sid, {})
+        skill_score = skill_data.get("skill_score")
+
+        experience_score = svc._compute_experience_fit(
+            student_exp, job_row["experience_min_years"], job_row["experience_max_years"],
+        )
+        preference_score = svc._compute_preference_fit(
+            r.get("preferred_remote_types") or [],
+            r.get("preferred_job_types") or [],
+            r.get("preferred_locations") or [],
+            job_row["remote_type"] or "",
+            job_row["employment_type"] or "",
+            job_row["location"],
+        )
+        composite = svc._compute_composite(vector_score, skill_score, experience_score, preference_score)
+
+        # Match score in percentage (0-100)
+        app["match_score"] = round(composite * 100, 1)
+        app["match_breakdown"] = {
+            "composite_score": round(composite, 4),
+            "vector_score": round(vector_score, 4),
+            "skill_score": round(skill_score, 4) if skill_score is not None else None,
+            "experience_score": round(experience_score, 4),
+            "preference_score": round(preference_score, 4),
+        }
+        app["matched_skills"] = skill_data.get("matched_skills", [])
+        app["missing_skills"] = skill_data.get("missing_skills", [])
+        app["total_experience_months"] = (student_exp or 0) * 12
         app["expected_salary"] = float(app["expected_salary"]) if app["expected_salary"] else None
         app["admin_match_score"] = float(app["admin_match_score"]) if app["admin_match_score"] else None
         app["name"] = f"{r['first_name'] or ''} {r['last_name'] or ''}".strip()
-        # Get student skills
+
+        # Get student skills (all of them, for display)
         skills_q = await db.execute(
             text("""
                 SELECT sk.name FROM student_skills ss
                 JOIN skills sk ON sk.skill_id = ss.skill_id
                 WHERE ss.student_id = :sid
             """),
-            {"sid": r["student_id"]},
+            {"sid": sid},
         )
         app["skills"] = [s["name"] for s in skills_q.mappings().all()]
+
+        # Remove internal fields not needed in response
+        for key in ["experience_years", "preferred_job_types", "preferred_remote_types", "preferred_locations", "vector_score"]:
+            app.pop(key, None)
+
         applicants.append(app)
 
-    return {"applicants": applicants, "total": total, "job": dict(job_row)}
+    # Apply min_match filter on composite score (post-compute)
+    if min_match > 0:
+        applicants = [a for a in applicants if a["match_score"] >= min_match]
+
+    # Sort
+    if sort_by == "match_score":
+        applicants.sort(key=lambda a: a["match_score"], reverse=(sort_order == "desc"))
+    elif sort_by == "applied_at":
+        applicants.sort(key=lambda a: a.get("applied_at") or "", reverse=(sort_order == "desc"))
+    elif sort_by == "name":
+        applicants.sort(key=lambda a: a.get("name", "").lower(), reverse=(sort_order == "desc"))
+
+    return {"applicants": applicants, "total": total, "job": {"job_id": job_row["job_id"], "title": job_row["title"]}}
 
 
 @router.post("/applications/bulk-approve")
@@ -791,7 +854,7 @@ async def update_application_status(
     if new_status in status_labels:
         stu_q = await db.execute(
             text("""
-                SELECT u.user_id, j.title AS job_title, c.company_name
+                SELECT u.user_id, u.email, j.title AS job_title, c.company_name
                 FROM applications a
                 JOIN students s ON s.student_id = a.student_id
                 JOIN users u ON u.user_id = s.user_id
@@ -808,6 +871,7 @@ async def update_application_status(
                 db, stu["user_id"], "application_update",
                 title_tpl,
                 msg_tpl.format(job=stu["job_title"], company=stu["company_name"]),
+                email=stu["email"],
                 action_url="/student/jobs?tab=applications",
                 action_text="View Applications",
                 reference_type="application", reference_id=application_id,

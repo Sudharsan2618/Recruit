@@ -8,13 +8,15 @@ import { Input } from "@/components/ui/input"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import {
   Search, ArrowLeft, ArrowRight, CheckCircle2, Clock, Briefcase,
   MapPin, Building2, Users, Loader2, Send, GitMerge, ExternalLink,
+  Target, Award, TrendingUp, Heart, CheckCircle, XCircle,
 } from "lucide-react"
 import {
   getAdminJobs, getJobApplicants, bulkApproveApplications, updateApplicationStatus,
-  type AdminJob, type JobApplicant,
+  type AdminJob, type JobApplicant, type MatchBreakdown,
 } from "@/lib/api"
 import { DashboardSkeleton } from "@/components/skeletons"
 import { TablePagination } from "@/components/table-pagination"
@@ -46,6 +48,32 @@ function getMatchColor(score: number) {
   if (score >= 60) return "bg-amber-100 text-amber-800"
   if (score >= 40) return "bg-orange-100 text-orange-800"
   return "bg-muted text-muted-foreground"
+}
+
+function MiniSignalBar({ label, score, icon, color }: { label: string; score: number | null; icon: React.ReactNode; color: string }) {
+  if (score === null || score === undefined) return null
+  const pct = Math.round(score * 100)
+  return (
+    <div className="flex items-center gap-1.5 text-[10px]">
+      {icon}
+      <div className="w-14 h-1.5 bg-muted rounded-full overflow-hidden">
+        <div className={`h-full rounded-full ${color}`} style={{ width: `${pct}%` }} />
+      </div>
+      <span className="text-muted-foreground w-6 text-right">{pct}%</span>
+    </div>
+  )
+}
+
+function MatchBreakdownTooltip({ breakdown }: { breakdown: MatchBreakdown }) {
+  return (
+    <div className="flex flex-col gap-1.5 p-1">
+      <p className="text-xs font-semibold mb-1">Score Breakdown</p>
+      <MiniSignalBar label="Semantic" score={breakdown.vector_score} icon={<Target className="h-2.5 w-2.5 text-violet-500" />} color="bg-violet-400" />
+      <MiniSignalBar label="Skills" score={breakdown.skill_score} icon={<Award className="h-2.5 w-2.5 text-blue-500" />} color="bg-blue-400" />
+      <MiniSignalBar label="Experience" score={breakdown.experience_score} icon={<TrendingUp className="h-2.5 w-2.5 text-amber-500" />} color="bg-amber-400" />
+      <MiniSignalBar label="Preferences" score={breakdown.preference_score} icon={<Heart className="h-2.5 w-2.5 text-rose-500" />} color="bg-rose-400" />
+    </div>
+  )
 }
 
 // ══════════════════════════════════════════════════════════════════════════
@@ -435,12 +463,13 @@ function ApplicantsView({ job, onBack }: { job: AdminJob; onBack: () => void }) 
             </SelectContent>
           </Select>
           <Select value={String(minMatch)} onValueChange={(v) => setMinMatch(Number(v))}>
-            <SelectTrigger className="w-full sm:w-36"><SelectValue /></SelectTrigger>
+            <SelectTrigger className="w-full sm:w-44"><SelectValue /></SelectTrigger>
             <SelectContent>
-              <SelectItem value="0">Any Match</SelectItem>
-              <SelectItem value="40">≥ 40%</SelectItem>
-              <SelectItem value="60">≥ 60%</SelectItem>
-              <SelectItem value="80">≥ 80%</SelectItem>
+              <SelectItem value="0">Any Composite</SelectItem>
+              <SelectItem value="40">≥ 40% Composite</SelectItem>
+              <SelectItem value="60">≥ 60% Composite</SelectItem>
+              <SelectItem value="65">≥ 65% (Threshold)</SelectItem>
+              <SelectItem value="80">≥ 80% Composite</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -526,9 +555,29 @@ function ApplicantsView({ job, onBack }: { job: AdminJob; onBack: () => void }) 
                         </div>
                       </TableCell>
                       <TableCell>
-                        <Badge className={getMatchColor(app.match_score)}>
-                          {app.match_score.toFixed(1)}%
-                        </Badge>
+                        <TooltipProvider delayDuration={200}>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Badge className={`cursor-help ${getMatchColor(app.match_score)}`}>
+                                {app.match_score.toFixed(1)}%
+                              </Badge>
+                            </TooltipTrigger>
+                            <TooltipContent side="right" className="bg-popover border shadow-md">
+                              {app.match_breakdown ? (
+                                <MatchBreakdownTooltip breakdown={app.match_breakdown} />
+                              ) : (
+                                <p className="text-xs">Composite match score</p>
+                              )}
+                            </TooltipContent>
+                          </Tooltip>
+                        </TooltipProvider>
+                        {/* Mini breakdown bars under badge */}
+                        {app.match_breakdown && (
+                          <div className="mt-1.5 flex flex-col gap-0.5">
+                            <MiniSignalBar label="S" score={app.match_breakdown.vector_score} icon={<Target className="h-2 w-2 text-violet-500" />} color="bg-violet-400" />
+                            <MiniSignalBar label="K" score={app.match_breakdown.skill_score} icon={<Award className="h-2 w-2 text-blue-500" />} color="bg-blue-400" />
+                          </div>
+                        )}
                       </TableCell>
                       <TableCell>
                         <Badge className={appStatusColors[app.application_status] || "bg-muted text-muted-foreground"}>
@@ -536,12 +585,43 @@ function ApplicantsView({ job, onBack }: { job: AdminJob; onBack: () => void }) 
                         </Badge>
                       </TableCell>
                       <TableCell className="hidden md:table-cell">
-                        <div className="flex flex-wrap gap-1 max-w-[200px]">
-                          {app.skills.slice(0, 4).map((s) => (
-                            <Badge key={s} variant="outline" className="text-[10px] px-1.5 py-0">{s}</Badge>
-                          ))}
-                          {app.skills.length > 4 && (
-                            <span className="text-[10px] text-muted-foreground">+{app.skills.length - 4}</span>
+                        <div className="flex flex-col gap-1.5">
+                          {/* Matched skills in green */}
+                          {app.matched_skills && app.matched_skills.length > 0 && (
+                            <div className="flex flex-wrap gap-1 max-w-[220px]">
+                              {app.matched_skills.slice(0, 3).map((s) => (
+                                <Badge key={s.skill_name} variant="outline" className="text-[10px] px-1.5 py-0 border-green-300 bg-green-50 text-green-700">
+                                  <CheckCircle className="h-2 w-2 mr-0.5" />{s.skill_name}
+                                </Badge>
+                              ))}
+                              {app.matched_skills.length > 3 && (
+                                <span className="text-[10px] text-green-600">+{app.matched_skills.length - 3}</span>
+                              )}
+                            </div>
+                          )}
+                          {/* Missing skills in red */}
+                          {app.missing_skills && app.missing_skills.length > 0 && (
+                            <div className="flex flex-wrap gap-1 max-w-[220px]">
+                              {app.missing_skills.slice(0, 2).map((s) => (
+                                <Badge key={s.skill_name} variant="outline" className="text-[10px] px-1.5 py-0 border-red-200 bg-red-50 text-red-600">
+                                  <XCircle className="h-2 w-2 mr-0.5" />{s.skill_name}
+                                </Badge>
+                              ))}
+                              {app.missing_skills.length > 2 && (
+                                <span className="text-[10px] text-red-500">+{app.missing_skills.length - 2} gaps</span>
+                              )}
+                            </div>
+                          )}
+                          {/* Fallback: all student skills */}
+                          {(!app.matched_skills || app.matched_skills.length === 0) && (!app.missing_skills || app.missing_skills.length === 0) && (
+                            <div className="flex flex-wrap gap-1 max-w-[200px]">
+                              {app.skills.slice(0, 4).map((s) => (
+                                <Badge key={s} variant="outline" className="text-[10px] px-1.5 py-0">{s}</Badge>
+                              ))}
+                              {app.skills.length > 4 && (
+                                <span className="text-[10px] text-muted-foreground">+{app.skills.length - 4}</span>
+                              )}
+                            </div>
                           )}
                         </div>
                       </TableCell>

@@ -102,15 +102,15 @@ export default function StudentDashboard() {
       </div>
 
       {/* Enrolled Courses + Learning Hours */}
-      <div className="grid gap-6 lg:grid-cols-3">
-        <Card className="lg:col-span-2">
-          <CardHeader className="flex flex-row items-center justify-between">
-            <CardTitle className="text-base">My Courses</CardTitle>
-            <Link href="/student/courses" className="text-xs text-primary hover:underline">Browse all</Link>
-          </CardHeader>
-          <CardContent className="flex flex-col gap-3">
+      {/* <div className="grid gap-4 sm:gap-6 lg:grid-cols-3"> */}
+        {/* <Card className="lg:col-span-2">
+          <div className="flex items-center justify-between p-3 pb-2 sm:p-6 sm:pb-4">
+            <h3 className="text-base font-semibold leading-none tracking-tight">My Courses</h3>
+            <Link href="/student/courses" className="shrink-0 whitespace-nowrap text-xs text-primary hover:underline">Browse all</Link>
+          </div>
+          <div className="flex flex-col gap-2 px-3 pb-3 sm:gap-3 sm:px-6 sm:pb-6">
             {enrolled_courses.length === 0 ? (
-              <div className="flex flex-col items-center gap-3 py-8 text-center">
+              <div className="flex flex-col items-center gap-3 py-4 text-center">
                 <BookOpen className="h-10 w-10 text-muted-foreground/40" />
                 <p className="text-sm text-muted-foreground">You haven&apos;t enrolled in any courses yet.</p>
                 <Button asChild size="sm">
@@ -122,15 +122,15 @@ export default function StudentDashboard() {
                 <Link
                   key={c.course_id}
                   href={`/student/courses/${c.slug}`}
-                  className="flex items-center gap-4 rounded-lg border border-border p-3 hover:bg-muted/50 transition-colors"
+                  className="flex items-center gap-3 rounded-lg border border-border p-2.5 sm:p-3 hover:bg-muted/50 transition-colors"
                 >
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10">
-                    <BookOpen className="h-5 w-5 text-primary" />
+                  <div className="flex h-9 w-9 sm:h-10 sm:w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10">
+                    <BookOpen className="h-4 w-4 sm:h-5 sm:w-5 text-primary" />
                   </div>
-                  <div className="flex-1 min-w-0">
+                  <div className="flex-1 min-w-0 overflow-hidden">
                     <p className="truncate text-sm font-medium text-foreground">{c.title}</p>
                     <div className="flex items-center gap-2 mt-1">
-                      <Progress value={c.progress_percentage} className="h-1.5 flex-1" />
+                      <Progress value={c.progress_percentage} className="h-1.5 flex-1 min-w-0" />
                       <span className="text-xs text-muted-foreground shrink-0">{Math.round(c.progress_percentage)}%</span>
                     </div>
                     <p className="text-xs text-muted-foreground mt-0.5">
@@ -140,20 +140,20 @@ export default function StudentDashboard() {
                 </Link>
               ))
             )}
-          </CardContent>
-        </Card>
+          </div>
+        </Card> */}
 
         {/* Learning Hours Chart */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-base">Learning Hours</CardTitle>
-          </CardHeader>
-          <CardContent>
+        {/* <Card>
+          <div className="p-3 sm:p-6 sm:pb-4">
+            <h3 className="text-base font-semibold leading-none tracking-tight">Learning Hours</h3>
+          </div>
+          <div className="px-3 pb-3 sm:px-6 sm:pb-6">
             {learning_hours_by_month.length > 0 ? (
-              <ResponsiveContainer width="100%" height={200}>
+              <ResponsiveContainer width="100%" height={180}>
                 <BarChart data={learning_hours_by_month}>
-                  <XAxis dataKey="month" axisLine={false} tickLine={false} className="text-xs" />
-                  <YAxis axisLine={false} tickLine={false} className="text-xs" />
+                  <XAxis dataKey="month" axisLine={false} tickLine={false} fontSize={12} />
+                  <YAxis axisLine={false} tickLine={false} fontSize={12} width={30} />
                   <Tooltip
                     contentStyle={{ borderRadius: "0.5rem", border: "1px solid hsl(var(--border))", background: "hsl(var(--card))" }}
                     labelStyle={{ color: "hsl(var(--foreground))" }}
@@ -162,13 +162,13 @@ export default function StudentDashboard() {
                 </BarChart>
               </ResponsiveContainer>
             ) : (
-              <div className="flex items-center justify-center h-[200px] text-sm text-muted-foreground">
+              <p className="text-sm text-muted-foreground text-center">
                 Start learning to see your progress chart!
-              </div>
+              </p>
             )}
-          </CardContent>
-        </Card>
-      </div>
+          </div>
+        </Card> */}
+      {/* </div> */}
 
       <div className="grid gap-6 lg:grid-cols-2">
         {/* Recent Activity */}

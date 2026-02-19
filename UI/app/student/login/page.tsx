@@ -63,14 +63,6 @@ export default function StudentLoginPage() {
             ))}
           </div>
 
-          {/* Demo credentials hint */}
-          <div className="rounded-lg border border-border bg-muted/50 p-4">
-            <p className="text-xs font-semibold text-foreground mb-2">🧪 Demo Credentials</p>
-            <div className="grid gap-1 text-xs text-muted-foreground">
-              <p><span className="font-medium">Email:</span> alex.johnson@email.com</p>
-              <p><span className="font-medium">Password:</span> Password@123</p>
-            </div>
-          </div>
 
           <Button variant="outline" asChild className="w-fit bg-transparent">
             <Link href="/">

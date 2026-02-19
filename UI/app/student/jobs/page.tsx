@@ -18,11 +18,12 @@ import {
 import {
   Search, MapPin, DollarSign, Briefcase, Clock, Sparkles, Building2,
   ChevronRight, Send, CheckCircle2, XCircle, Loader2, Star, Calendar,
-  Users, Globe, Zap,
+  Users, Globe, Zap, BookOpen, Target, TrendingUp, Award, GraduationCap,
 } from "lucide-react"
 import {
   getRecommendedJobs, getStudentJobs, getJobDetail, applyToJob, getMyApplications,
   type JobListItem, type JobDetailFull, type ApplicationOut, type ApplyPayload,
+  type MatchBreakdown, type MatchedSkill, type MissingSkill, type GapCourse,
 } from "@/lib/api"
 import { JobBoardSkeleton } from "@/components/skeletons"
 
@@ -71,16 +72,137 @@ function timeAgo(dateStr: string | null) {
   return `${Math.floor(days / 30)}mo ago`
 }
 
+// ── Composite Match Badge ───────────────────────────────────────────────
 function MatchBadge({ score }: { score: number | null }) {
   if (score === null || score === undefined) return null
   const pct = Math.round(score * 100)
-  const color = pct >= 80 ? "bg-emerald-100 text-emerald-800"
-    : pct >= 65 ? "bg-blue-100 text-blue-800"
-    : "bg-gray-100 text-gray-600"
+  const color = pct >= 80 ? "bg-emerald-100 text-emerald-800 border-emerald-200"
+    : pct >= 65 ? "bg-blue-100 text-blue-800 border-blue-200"
+    : "bg-gray-100 text-gray-600 border-gray-200"
   return (
-    <Badge className={`${color} gap-1 font-medium`}>
+    <Badge className={`${color} gap-1 font-semibold border`}>
       <Zap className="h-3 w-3" />{pct}% match
     </Badge>
+  )
+}
+
+// ── Mini score bar for breakdown ────────────────────────────────────────
+function ScoreBar({ label, score, icon, color }: { label: string; score: number | null; icon: React.ReactNode; color: string }) {
+  if (score === null || score === undefined) return null
+  const pct = Math.round(score * 100)
+  return (
+    <div className="flex items-center gap-2">
+      <div className="flex items-center gap-1.5 w-28 shrink-0">
+        {icon}
+        <span className="text-xs text-muted-foreground">{label}</span>
+      </div>
+      <div className="flex-1 h-2 bg-muted rounded-full overflow-hidden">
+        <div
+          className={`h-full rounded-full transition-all duration-500 ${color}`}
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+      <span className="text-xs font-medium w-8 text-right">{pct}%</span>
+    </div>
+  )
+}
+
+// ── Match breakdown component (compact, for cards) ──────────────────────
+function MatchBreakdownMini({ breakdown }: { breakdown: MatchBreakdown | null }) {
+  if (!breakdown) return null
+  return (
+    <div className="flex flex-col gap-1 mt-2 pt-2 border-t">
+      <ScoreBar label="Semantic" score={breakdown.vector_score} icon={<Target className="h-3 w-3 text-violet-500" />} color="bg-violet-400" />
+      <ScoreBar label="Skills" score={breakdown.skill_score} icon={<Award className="h-3 w-3 text-blue-500" />} color="bg-blue-400" />
+      <ScoreBar label="Experience" score={breakdown.experience_score} icon={<TrendingUp className="h-3 w-3 text-amber-500" />} color="bg-amber-400" />
+      <ScoreBar label="Preferences" score={breakdown.preference_score} icon={<Sparkles className="h-3 w-3 text-emerald-500" />} color="bg-emerald-400" />
+    </div>
+  )
+}
+
+// ── Skill match display ─────────────────────────────────────────────────
+function SkillMatchDisplay({
+  matched, missing, compact = false,
+}: {
+  matched: MatchedSkill[]; missing: MissingSkill[]; compact?: boolean;
+}) {
+  if (matched.length === 0 && missing.length === 0) return null
+  const total = matched.length + missing.length
+
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex items-center gap-2">
+        <span className="text-sm font-medium">
+          Skills ({matched.length}/{total})
+        </span>
+        {matched.length > 0 && (
+          <div className="flex-1 h-1.5 bg-muted rounded-full overflow-hidden">
+            <div
+              className="h-full rounded-full bg-gradient-to-r from-emerald-400 to-emerald-500 transition-all duration-500"
+              style={{ width: `${(matched.length / total) * 100}%` }}
+            />
+          </div>
+        )}
+      </div>
+
+      {/* Matched skills */}
+      {matched.length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          {(compact ? matched.slice(0, 5) : matched).map((s) => (
+            <Badge key={s.skill_name} className="bg-emerald-50 text-emerald-700 border border-emerald-200 gap-1 text-xs">
+              <CheckCircle2 className="h-3 w-3" />{s.skill_name}
+              {s.proficiency_level >= 4 && <Star className="h-2.5 w-2.5 fill-current text-amber-500" />}
+            </Badge>
+          ))}
+          {compact && matched.length > 5 && (
+            <Badge variant="outline" className="text-xs">+{matched.length - 5}</Badge>
+          )}
+        </div>
+      )}
+
+      {/* Missing skills */}
+      {missing.length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          {(compact ? missing.slice(0, 3) : missing).map((s) => (
+            <Badge key={s.skill_name} className="bg-red-50 text-red-600 border border-red-200 gap-1 text-xs">
+              <XCircle className="h-3 w-3" />{s.skill_name}
+              {s.is_mandatory && <span className="text-[10px] font-bold">REQ</span>}
+            </Badge>
+          ))}
+          {compact && missing.length > 3 && (
+            <Badge variant="outline" className="text-xs text-red-600">+{missing.length - 3} missing</Badge>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ── Gap Courses ─────────────────────────────────────────────────────────
+function GapCoursesSection({ courses }: { courses: GapCourse[] }) {
+  if (!courses || courses.length === 0) return null
+  return (
+    <div className="rounded-lg border border-amber-200 bg-amber-50/50 p-4">
+      <div className="flex items-center gap-2 mb-3">
+        <GraduationCap className="h-4 w-4 text-amber-600" />
+        <h4 className="font-semibold text-sm text-amber-900">Boost Your Match</h4>
+      </div>
+      <div className="flex flex-col gap-2">
+        {courses.map((c) => (
+          <div key={c.course_id} className="flex items-center justify-between gap-2 p-2 rounded-md bg-white border border-amber-100">
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-medium truncate">{c.title}</p>
+              <p className="text-xs text-muted-foreground">
+                Teaches: {c.teaches_skills.join(", ")}
+              </p>
+            </div>
+            <Badge variant="outline" className="shrink-0 text-xs font-medium">
+              {c.price > 0 ? `₹${c.price}` : "Free"}
+            </Badge>
+          </div>
+        ))}
+      </div>
+    </div>
   )
 }
 
@@ -88,40 +210,54 @@ function MatchBadge({ score }: { score: number | null }) {
 
 function JobCard({ job, onView }: { job: JobListItem; onView: () => void }) {
   const salary = job.salary_is_visible ? formatSalary(job.salary_min, job.salary_max, job.salary_currency) : null
+  const hasBreakdown = job.match_breakdown !== null
 
   return (
     <Card className="transition-all hover:shadow-md hover:border-primary/20 cursor-pointer" onClick={onView}>
-      <CardContent className="flex flex-col gap-3 p-5 md:flex-row md:items-start md:justify-between">
-        <div className="flex-1 min-w-0">
-          <div className="flex flex-wrap items-center gap-2">
-            <h3 className="text-base font-semibold text-foreground truncate">{job.title}</h3>
-            <MatchBadge score={job.match_score} />
+      <CardContent className="flex flex-col gap-3 p-5">
+        <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-3">
+          <div className="flex-1 min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <h3 className="text-base font-semibold text-foreground truncate">{job.title}</h3>
+              <MatchBadge score={job.match_score} />
+            </div>
+            <div className="flex items-center gap-2 mt-1">
+              <Building2 className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+              <span className="text-sm text-muted-foreground truncate">{job.company.company_name}</span>
+              {job.company.industry && (
+                <span className="text-xs text-muted-foreground/60">· {job.company.industry}</span>
+              )}
+            </div>
+            <div className="mt-2.5 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+              {job.location && (
+                <span className="flex items-center gap-1"><MapPin className="h-3 w-3" />{job.location}</span>
+              )}
+              <span className="flex items-center gap-1">
+                <Briefcase className="h-3 w-3" />{typeLabels[job.employment_type] || job.employment_type}
+              </span>
+              <span className="flex items-center gap-1">
+                <Globe className="h-3 w-3" />{remoteLabels[job.remote_type] || job.remote_type}
+              </span>
+              {salary && (
+                <span className="flex items-center gap-1"><DollarSign className="h-3 w-3" />{salary}</span>
+              )}
+              {job.posted_at && (
+                <span className="flex items-center gap-1"><Clock className="h-3 w-3" />{timeAgo(job.posted_at)}</span>
+              )}
+            </div>
           </div>
-          <div className="flex items-center gap-2 mt-1">
-            <Building2 className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-            <span className="text-sm text-muted-foreground truncate">{job.company.company_name}</span>
-            {job.company.industry && (
-              <span className="text-xs text-muted-foreground/60">· {job.company.industry}</span>
-            )}
+          <div className="flex items-center gap-2 shrink-0 self-start md:self-center">
+            <Button variant="outline" size="sm" className="gap-1">
+              View <ChevronRight className="h-3 w-3" />
+            </Button>
           </div>
-          <div className="mt-2.5 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-            {job.location && (
-              <span className="flex items-center gap-1"><MapPin className="h-3 w-3" />{job.location}</span>
-            )}
-            <span className="flex items-center gap-1">
-              <Briefcase className="h-3 w-3" />{typeLabels[job.employment_type] || job.employment_type}
-            </span>
-            <span className="flex items-center gap-1">
-              <Globe className="h-3 w-3" />{remoteLabels[job.remote_type] || job.remote_type}
-            </span>
-            {salary && (
-              <span className="flex items-center gap-1"><DollarSign className="h-3 w-3" />{salary}</span>
-            )}
-            {job.posted_at && (
-              <span className="flex items-center gap-1"><Clock className="h-3 w-3" />{timeAgo(job.posted_at)}</span>
-            )}
-          </div>
-          <div className="mt-2.5 flex flex-wrap gap-1.5">
+        </div>
+
+        {/* Skill match tags (compact) */}
+        {(job.matched_skills.length > 0 || job.missing_skills.length > 0) ? (
+          <SkillMatchDisplay matched={job.matched_skills} missing={job.missing_skills} compact />
+        ) : (
+          <div className="flex flex-wrap gap-1.5">
             {job.skills.slice(0, 5).map((s) => (
               <Badge key={s.skill_id} variant="secondary" className="text-xs">
                 {s.name}{s.is_mandatory && <Star className="h-2.5 w-2.5 ml-0.5 fill-current" />}
@@ -131,12 +267,10 @@ function JobCard({ job, onView }: { job: JobListItem; onView: () => void }) {
               <Badge variant="outline" className="text-xs">+{job.skills.length - 5}</Badge>
             )}
           </div>
-        </div>
-        <div className="flex items-center gap-2 shrink-0 self-start md:self-center">
-          <Button variant="outline" size="sm" className="gap-1">
-            View <ChevronRight className="h-3 w-3" />
-          </Button>
-        </div>
+        )}
+
+        {/* Mini breakdown bars */}
+        {hasBreakdown && <MatchBreakdownMini breakdown={job.match_breakdown} />}
       </CardContent>
     </Card>
   )
@@ -186,6 +320,40 @@ function JobDetailSheet({
             </SheetHeader>
 
             <div className="flex flex-col gap-5 pb-6">
+              {/* Match breakdown (full) */}
+              {job.match_breakdown && (
+                <div className="rounded-lg border bg-muted/30 p-4">
+                  <h4 className="font-semibold text-sm mb-3 flex items-center gap-2">
+                    <Target className="h-4 w-4 text-primary" />
+                    Match Analysis
+                  </h4>
+                  <div className="flex flex-col gap-2">
+                    <ScoreBar label="Semantic" score={job.match_breakdown.vector_score} icon={<Target className="h-3 w-3 text-violet-500" />} color="bg-violet-400" />
+                    <ScoreBar label="Skills" score={job.match_breakdown.skill_score} icon={<Award className="h-3 w-3 text-blue-500" />} color="bg-blue-400" />
+                    <ScoreBar label="Experience" score={job.match_breakdown.experience_score} icon={<TrendingUp className="h-3 w-3 text-amber-500" />} color="bg-amber-400" />
+                    <ScoreBar label="Preferences" score={job.match_breakdown.preference_score} icon={<Sparkles className="h-3 w-3 text-emerald-500" />} color="bg-emerald-400" />
+                  </div>
+                  <div className="mt-3 pt-2 border-t flex items-center justify-between">
+                    <span className="text-xs text-muted-foreground">Composite Score</span>
+                    <span className="text-sm font-bold">{Math.round(job.match_breakdown.composite_score * 100)}%</span>
+                  </div>
+                </div>
+              )}
+
+              {/* Skill match breakdown (full) */}
+              {(job.matched_skills.length > 0 || job.missing_skills.length > 0) && (
+                <div className="rounded-lg border p-4">
+                  <h4 className="font-semibold text-sm mb-3 flex items-center gap-2">
+                    <Award className="h-4 w-4 text-blue-500" />
+                    Skill Analysis
+                  </h4>
+                  <SkillMatchDisplay matched={job.matched_skills} missing={job.missing_skills} />
+                </div>
+              )}
+
+              {/* Gap courses */}
+              <GapCoursesSection courses={job.gap_courses} />
+
               {/* Meta */}
               <div className="flex flex-wrap gap-2">
                 <Badge variant="outline">{typeLabels[job.employment_type] || job.employment_type}</Badge>
@@ -249,8 +417,8 @@ function JobDetailSheet({
                 </div>
               )}
 
-              {/* Skills */}
-              {job.skills.length > 0 && (
+              {/* Skills (from job listing — shown if no match data) */}
+              {job.skills.length > 0 && job.matched_skills.length === 0 && job.missing_skills.length === 0 && (
                 <div>
                   <h4 className="font-semibold text-sm mb-1.5">Skills</h4>
                   <div className="flex flex-wrap gap-1.5">
@@ -413,7 +581,7 @@ function ApplyDialog({
 export default function JobBoard() {
   const [initialLoading, setInitialLoading] = useState(true)
   const [loading, setLoading] = useState(false)
-  const [tab, setTab] = useState("browse")
+  const [tab, setTab] = useState("recommended")
 
   // Recommended jobs
   const [recommended, setRecommended] = useState<JobListItem[]>([])
@@ -439,7 +607,7 @@ export default function JobBoard() {
   // Initial page load — fetch recommended + all jobs in parallel, show skeleton until both done
   useEffect(() => {
     const loadInitial = async () => {
-      const recPromise = getRecommendedJobs(10)
+      const recPromise = getRecommendedJobs(50)
         .then((res) => {
           setRecommended(res.jobs)
           setRecError(false)
@@ -520,74 +688,92 @@ export default function JobBoard() {
       </div>
 
       <Tabs value={tab} onValueChange={setTab}>
-        <TabsList>
-          <TabsTrigger value="browse" className="gap-1.5">
-            <Briefcase className="h-4 w-4" /> Browse Jobs
-          </TabsTrigger>
-          <TabsTrigger value="applications" className="gap-1.5">
-            <Send className="h-4 w-4" /> My Applications
-          </TabsTrigger>
-        </TabsList>
+        <TabsList className="w-full sm:w-auto flex overflow-x-auto no-scrollbar">
+            <TabsTrigger value="recommended" className="gap-1.5 text-xs sm:text-sm whitespace-nowrap flex-1 sm:flex-none">
+              <Sparkles className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+              <span className="sm:hidden">AI Match</span>
+              <span className="hidden sm:inline">AI Recommendations</span>
+              {recommended.length > 0 && (
+                <Badge variant="secondary" className="ml-0.5 h-4 sm:h-5 px-1 sm:px-1.5 text-[9px] sm:text-[10px] font-bold">
+                  {recommended.length}
+                </Badge>
+              )}
+            </TabsTrigger>
+            <TabsTrigger value="browse" className="gap-1.5 text-xs sm:text-sm whitespace-nowrap flex-1 sm:flex-none">
+              <Briefcase className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+              <span className="sm:hidden">Browse</span>
+              <span className="hidden sm:inline">Browse Jobs</span>
+            </TabsTrigger>
+            <TabsTrigger value="applications" className="gap-1.5 text-xs sm:text-sm whitespace-nowrap flex-1 sm:flex-none">
+              <Send className="h-3.5 w-3.5 sm:h-4 sm:w-4" />
+              <span className="sm:hidden">Applied</span>
+              <span className="hidden sm:inline">My Applications</span>
+            </TabsTrigger>
+          </TabsList>
 
-        <TabsContent value="browse" className="mt-6 flex flex-col gap-6">
-          {/* ── Recommended Section ── */}
-          {recommended.length > 0 ? (
-            <div>
-              <div className="flex items-center gap-2 mb-3">
-                <Sparkles className="h-5 w-5 text-amber-500" />
-                <h2 className="text-lg font-semibold text-foreground">Recommended for You</h2>
-                <Badge variant="secondary" className="text-xs">{recommended.length} matches</Badge>
+        {/* ── AI Recommendations Tab ── */}
+        <TabsContent value="recommended" className="mt-6 flex flex-col gap-6">
+          {recLoading ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="h-6 w-6 animate-spin text-primary mr-2" />
+              <span className="text-sm text-muted-foreground">Analyzing your profile for best matches...</span>
+            </div>
+          ) : recommended.length > 0 ? (
+            <>
+              {/* Hero header */}
+              <div className="rounded-xl border bg-gradient-to-br from-violet-50 via-blue-50 to-amber-50 p-5">
+                <div className="flex items-start gap-3">
+                  <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-br from-amber-400 to-orange-500 shadow-sm">
+                    <Sparkles className="h-5 w-5 text-white" />
+                  </div>
+                  <div className="flex-1">
+                    <h2 className="text-lg font-semibold text-foreground">
+                      {recommended.length} Jobs Matched for You
+                    </h2>
+                    <p className="text-sm text-muted-foreground mt-0.5">
+                      Ranked by composite score — Semantic 35% + Skills 35% + Experience 20% + Preferences 10%.
+                      Only jobs with ≥65% composite match are shown.
+                    </p>
+                  </div>
+                </div>
               </div>
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+
+              {/* Recommended job cards */}
+              <div className="flex flex-col gap-3">
                 {recommended.map((job) => (
-                  <Card
-                    key={job.job_id}
-                    className="cursor-pointer transition-all hover:shadow-md hover:border-amber-200 border-amber-100"
-                    onClick={() => openJobDetail(job.job_id)}
-                  >
-                    <CardContent className="p-4">
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="min-w-0 flex-1">
-                          <p className="font-semibold text-sm truncate">{job.title}</p>
-                          <p className="text-xs text-muted-foreground truncate mt-0.5">
-                            {job.company.company_name}
-                          </p>
-                        </div>
-                        <MatchBadge score={job.match_score} />
-                      </div>
-                      <div className="flex flex-wrap items-center gap-2 mt-2 text-xs text-muted-foreground">
-                        {job.location && (
-                          <span className="flex items-center gap-0.5"><MapPin className="h-3 w-3" />{job.location}</span>
-                        )}
-                        <span>{typeLabels[job.employment_type] || job.employment_type}</span>
-                      </div>
-                      <div className="flex flex-wrap gap-1 mt-2">
-                        {job.skills.slice(0, 3).map((s) => (
-                          <Badge key={s.skill_id} variant="secondary" className="text-[10px] px-1.5 py-0">
-                            {s.name}
-                          </Badge>
-                        ))}
-                      </div>
-                    </CardContent>
-                  </Card>
+                  <JobCard key={job.job_id} job={job} onView={() => openJobDetail(job.job_id)} />
                 ))}
               </div>
-            </div>
+            </>
           ) : (
-            <div className="rounded-lg border border-amber-100 bg-amber-50/50 p-4">
-              <div className="flex items-start gap-3">
-                <Sparkles className="h-5 w-5 text-amber-500 mt-0.5 shrink-0" />
-                <div>
-                  <p className="text-sm font-medium text-foreground">AI Recommendations</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    Complete your profile and upload your resume to get personalized job recommendations based on your skills and experience.
-                  </p>
-                </div>
+            <div className="flex flex-col items-center justify-center py-20 text-center">
+              <div className="flex h-16 w-16 items-center justify-center rounded-full bg-amber-50 mb-4">
+                <Sparkles className="h-8 w-8 text-amber-500" />
+              </div>
+              <p className="text-lg font-semibold text-foreground">No AI Recommendations Yet</p>
+              <p className="text-sm text-muted-foreground mt-1 max-w-md">
+                {recError
+                  ? "We couldn't generate recommendations right now. Please try again later."
+                  : "Complete your profile, add your skills, and upload your resume to unlock personalized job recommendations powered by our hybrid matching algorithm."
+                }
+              </p>
+              <div className="flex gap-3 mt-5">
+                <Button variant="outline" onClick={() => setTab("browse")} className="gap-1.5">
+                  <Briefcase className="h-4 w-4" /> Browse All Jobs
+                </Button>
+                <Button asChild className="gap-1.5">
+                  <a href="/student/profile">
+                    <Users className="h-4 w-4" /> Complete Profile
+                  </a>
+                </Button>
               </div>
             </div>
           )}
+        </TabsContent>
 
-          {/* ── Filters ── */}
+        {/* ── Browse Jobs Tab ── */}
+        <TabsContent value="browse" className="mt-6 flex flex-col gap-6">
+          {/* Filters */}
           <div className="flex flex-wrap items-center gap-3">
             <div className="relative flex-1 min-w-[200px]">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -620,7 +806,7 @@ export default function JobBoard() {
             </Select>
           </div>
 
-          {/* ── All Jobs ── */}
+          {/* All Jobs */}
           <div>
             <div className="flex items-center gap-2 mb-3">
               <h2 className="text-lg font-semibold text-foreground">All Openings</h2>

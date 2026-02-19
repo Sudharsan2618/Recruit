@@ -58,6 +58,11 @@ import {
 import { useAuth } from "@/lib/auth-context"
 import { cn } from "@/lib/utils"
 import { PlayerSkeleton } from "@/components/skeletons"
+import { Document, Page, pdfjs } from "react-pdf"
+import "react-pdf/dist/Page/AnnotationLayer.css"
+import "react-pdf/dist/Page/TextLayer.css"
+
+pdfjs.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.mjs`
 
 const contentTypeIcons: Record<string, React.ElementType> = {
   video: Video,
@@ -84,6 +89,100 @@ function mergeRanges(ranges: [number, number][]): [number, number][] {
 
 function totalUniqueSeconds(ranges: [number, number][]): number {
   return mergeRanges(ranges).reduce((sum, [s, e]) => sum + (e - s), 0)
+}
+
+// ── Native PDF Viewer Component ──
+function PdfViewer({ url }: { url: string }) {
+  const [numPages, setNumPages] = useState<number>(0)
+  const [pageWidth, setPageWidth] = useState<number>(600)
+  const [isLoading, setIsLoading] = useState(true)
+  const containerRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    function updateWidth() {
+      if (containerRef.current) {
+        setPageWidth(containerRef.current.clientWidth - 16)
+      }
+    }
+    updateWidth()
+    window.addEventListener("resize", updateWidth)
+    return () => window.removeEventListener("resize", updateWidth)
+  }, [])
+
+  function onDocumentLoadSuccess({ numPages: n }: { numPages: number }) {
+    setNumPages(n)
+    setIsLoading(false)
+  }
+
+  return (
+    <div ref={containerRef} className="flex-1 overflow-y-auto bg-muted/30 px-2 py-4 min-h-[500px] relative">
+      {/* Full-screen loader overlay while document loads */}
+      {isLoading && (
+        <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-background/95 backdrop-blur-sm gap-4">
+          <div className="relative">
+            <div className="h-16 w-16 rounded-2xl bg-primary/10 border border-primary/20 flex items-center justify-center animate-pulse">
+              <FileText className="h-8 w-8 text-primary" />
+            </div>
+            <div className="absolute -bottom-1 -right-1 h-6 w-6 rounded-full bg-background border-2 border-primary flex items-center justify-center">
+              <Loader2 className="h-3.5 w-3.5 animate-spin text-primary" />
+            </div>
+          </div>
+          <div className="text-center space-y-1">
+            <p className="text-sm font-medium text-foreground">Loading Document</p>
+            <p className="text-xs text-muted-foreground">Please wait while the file is being prepared...</p>
+          </div>
+          <div className="w-48 h-1.5 bg-muted rounded-full overflow-hidden">
+            <div className="h-full bg-primary/60 rounded-full animate-[shimmer_1.5s_ease-in-out_infinite]"
+              style={{ width: '60%', animation: 'shimmer 1.5s ease-in-out infinite alternate' }}
+            />
+          </div>
+          <style jsx>{`
+            @keyframes shimmer {
+              0% { width: 20%; opacity: 0.5; }
+              100% { width: 80%; opacity: 1; }
+            }
+          `}</style>
+        </div>
+      )}
+
+      <Document
+        file={url}
+        onLoadSuccess={onDocumentLoadSuccess}
+        onLoadError={() => setIsLoading(false)}
+        loading={null}
+        error={
+          <div className="flex flex-col items-center justify-center py-20 gap-3 text-center">
+            <div className="h-14 w-14 rounded-2xl bg-destructive/10 border border-destructive/20 flex items-center justify-center">
+              <AlertCircle className="h-7 w-7 text-destructive" />
+            </div>
+            <div className="space-y-1">
+              <p className="text-sm font-medium text-foreground">Unable to Load Document</p>
+              <p className="text-xs text-muted-foreground">The file may be unavailable or inaccessible.</p>
+            </div>
+          </div>
+        }
+      >
+        {Array.from(new Array(numPages), (_, index) => (
+          <div key={`page_${index + 1}`} className="mb-3 mx-auto shadow-md rounded-lg overflow-hidden bg-white" style={{ maxWidth: pageWidth }}>
+            <Page
+              pageNumber={index + 1}
+              width={pageWidth}
+              renderTextLayer={true}
+              renderAnnotationLayer={true}
+              loading={
+                <div className="flex items-center justify-center py-12">
+                  <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                </div>
+              }
+            />
+          </div>
+        ))}
+      </Document>
+      {numPages > 0 && (
+        <p className="text-center text-xs text-muted-foreground mt-2">{numPages} page{numPages !== 1 ? "s" : ""}</p>
+      )}
+    </div>
+  )
 }
 
 export default function CoursePlayer() {
@@ -666,9 +765,9 @@ export default function CoursePlayer() {
       {/* Main content - Immersive Layout */}
       <div className="flex flex-1 overflow-hidden relative">
         {/* Content area */}
-        <div className="flex flex-1 flex-col overflow-y-auto bg-background pl-6">
+        <div className="flex flex-1 flex-col overflow-y-auto bg-background px-3 sm:px-4 lg:px-6">
           {/* Video / Content Wrapper */}
-          <div className="w-full bg-black relative flex flex-col group">
+          <div className={cn("w-full relative flex flex-col group", currentLesson?.content_type === "video" ? "bg-black" : "bg-background")}>
             <div className="w-full relative flex-1 flex flex-col">
               
               {lessonLoading ? (
@@ -866,49 +965,43 @@ export default function CoursePlayer() {
                   {currentLesson?.content_type === "pdf" && (() => {
                     const url = currentLesson.content_url || ""
                     const ext = url.split(".").pop()?.toLowerCase() || ""
+                    const isPdf = ext === "pdf" || (!ext && !url.match(/\.(pptx?|docx?|xlsx?)$/i))
                     const isOfficeDoc = ["pptx", "ppt", "docx", "doc", "xlsx", "xls"].includes(ext)
                     const fileTypeLabel = ext === "pptx" || ext === "ppt" ? "Presentation"
                       : ext === "docx" || ext === "doc" ? "Document"
                       : ext === "xlsx" || ext === "xls" ? "Spreadsheet"
                       : "PDF"
-                    const viewerUrl = isOfficeDoc
-                      ? `https://docs.google.com/gview?url=${encodeURIComponent(url)}&embedded=true`
-                      : `${url}#toolbar=0`
+                    // Use Microsoft Office viewer for Office docs (more reliable on mobile)
+                    const officeViewerUrl = `https://view.officeapps.live.com/op/embed.aspx?src=${encodeURIComponent(url)}`
 
                     return (
                       <div className="flex-1 flex flex-col overflow-hidden">
                         <div className="h-12 bg-muted flex items-center justify-between px-3 sm:px-6 shrink-0 border-b border-border">
-                          <div className="flex items-center gap-2">
-                            <FileText className="w-4 h-4 text-primary" />
-                            <span className="text-sm font-medium text-foreground">{currentLesson.title}</span>
-                            <Badge variant="outline" className="text-[10px] px-1.5 py-0">{fileTypeLabel}</Badge>
+                          <div className="flex items-center gap-2 min-w-0">
+                            <FileText className="w-4 h-4 text-primary shrink-0" />
+                            <span className="text-sm font-medium text-foreground truncate">{currentLesson.title}</span>
+                            <Badge variant="outline" className="text-[10px] px-1.5 py-0 shrink-0">{fileTypeLabel}</Badge>
                           </div>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-8 text-muted-foreground hover:text-foreground"
-                            onClick={() => {
-                              if (user?.student_id && course && currentLesson) {
-                                trackActivity({
-                                  student_id: user.student_id,
-                                  course_id: course.course_id,
-                                  lesson_id: currentLesson.lesson_id,
-                                  activity_type: "resource_downloaded",
-                                  session_id: sessionId || undefined,
-                                  details: { resource: { url, type: ext || "pdf" } }
-                                }).catch(console.warn)
-                              }
-                              window.open(url, "_blank")
-                            }}
-                          >
-                            <Download className="w-3.5 h-3.5 mr-2" /> Download
-                          </Button>
                         </div>
-                        <iframe
-                          src={viewerUrl}
-                          className="flex-1 w-full border-none min-h-[600px]"
-                          title={currentLesson.title}
-                        />
+
+                        {isPdf ? (
+                          <PdfViewer url={url} />
+                        ) : isOfficeDoc ? (
+                          <div className="flex-1 flex flex-col relative min-h-[500px]">
+                            <iframe
+                              src={officeViewerUrl}
+                              className="flex-1 w-full border-none"
+                              title={currentLesson.title}
+                              style={{ minHeight: '500px' }}
+                            />
+                          </div>
+                        ) : (
+                          <iframe
+                            src={`https://docs.google.com/gview?url=${encodeURIComponent(url)}&embedded=true`}
+                            className="flex-1 w-full border-none min-h-[600px]"
+                            title={currentLesson.title}
+                          />
+                        )}
                       </div>
                     )
                   })()}
@@ -1157,7 +1250,7 @@ export default function CoursePlayer() {
 
         {/* Premium Sidebar - Curriculum Panel */}
         {sidebarOpen && (
-          <aside className="absolute inset-0 sm:relative sm:inset-auto w-full sm:w-[330px] flex flex-col border-l border-border/40 bg-gradient-to-b from-white to-slate-50/80 dark:from-slate-900 dark:to-slate-950 overflow-hidden shrink-0 z-30 sm:z-10 animate-in slide-in-from-right duration-500 shadow-[-8px_0_30px_rgba(0,0,0,0.06)]">
+          <aside className="absolute inset-0 sm:relative sm:inset-auto w-full sm:w-[330px] flex flex-col border-l border-border/40 bg-gradient-to-b from-white to-slate-50 dark:from-slate-900 dark:to-slate-950 overflow-hidden shrink-0 z-30 sm:z-10 animate-in slide-in-from-right duration-500 shadow-[-8px_0_30px_rgba(0,0,0,0.06)]">
             {/* Sidebar Header */}
             <div className="px-4 pt-4 pb-4 border-b border-border/30 sm:px-7 sm:pt-7 sm:pb-5">
               <div className="flex items-center justify-between mb-4">

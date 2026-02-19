@@ -8,6 +8,7 @@ from datetime import datetime
 
 from app.db.postgres import get_db
 from app.services.auth_service import decode_access_token
+from app.services.novu_service import trigger_novu_notification
 
 router = APIRouter(prefix="/notifications", tags=["Notifications"])
 
@@ -36,6 +37,7 @@ async def create_notification(
     action_text: str | None = None,
     reference_type: str | None = None,
     reference_id: int | None = None,
+    workflow_id: str = "onboarding-demo-workflow",
 ):
     """Insert a notification row. Call this from any endpoint that needs to notify a user."""
     await db.execute(
@@ -54,6 +56,16 @@ async def create_notification(
             "reference_id": reference_id,
         },
     )
+
+    # ── Trigger Novu ──
+    payload = {
+        "title": title,
+        "message": message,
+        "type": notification_type,
+        "action_url": action_url,
+        "reference_id": reference_id
+    }
+    trigger_novu_notification(user_id, workflow_id, payload)
 
 
 # ── GET /notifications/unread-count ──────────────────────────────────────

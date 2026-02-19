@@ -197,11 +197,23 @@ export default function ProfilePage() {
       </div>
 
       <Tabs defaultValue="profile" className="flex flex-col gap-4">
-        <TabsList className="self-start">
-          <TabsTrigger value="profile">Profile</TabsTrigger>
-          <TabsTrigger value="preferences">Job Preferences</TabsTrigger>
-          <TabsTrigger value="resume">Resume & AI Analysis</TabsTrigger>
-          <TabsTrigger value="applications">Applications</TabsTrigger>
+        <TabsList className="w-full sm:w-auto flex overflow-x-auto no-scrollbar">
+          <TabsTrigger value="profile" className="text-xs sm:text-sm whitespace-nowrap flex-1 sm:flex-none">
+            <span className="sm:hidden">Profile</span>
+            <span className="hidden sm:inline">Profile</span>
+          </TabsTrigger>
+          <TabsTrigger value="preferences" className="text-xs sm:text-sm whitespace-nowrap flex-1 sm:flex-none">
+            <span className="sm:hidden">Job Prefs</span>
+            <span className="hidden sm:inline">Job Preferences</span>
+          </TabsTrigger>
+          <TabsTrigger value="resume" className="text-xs sm:text-sm whitespace-nowrap flex-1 sm:flex-none">
+            <span className="sm:hidden">Resume</span>
+            <span className="hidden sm:inline">Resume & AI Analysis</span>
+          </TabsTrigger>
+          <TabsTrigger value="applications" className="text-xs sm:text-sm whitespace-nowrap flex-1 sm:flex-none">
+            <span className="sm:hidden">Applied</span>
+            <span className="hidden sm:inline">Applications</span>
+          </TabsTrigger>
         </TabsList>
 
         {/* Profile Tab */}

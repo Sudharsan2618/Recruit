@@ -12,6 +12,7 @@ from app.db.postgres import get_db
 from app.services.job_service import JobService
 from app.services.auth_service import decode_access_token
 from app.schemas.job import JobCreateRequest, JobOut
+from app.api.v1.endpoints.notifications import create_notification
 
 router = APIRouter(prefix="/jobs", tags=["Jobs"])
 
@@ -216,6 +217,41 @@ async def update_candidate_stage(
     update_fields["aid"] = application_id
 
     await db.execute(text(f"UPDATE applications SET {set_parts} WHERE application_id = :aid"), update_fields)
+    
+    # ── Notify the student about company stage update ──
+    stage_labels = {
+        "under_review": ("Application Under Review", "The company is reviewing your application for {job}."),
+        "interviewing": ("Interview Invitation!", "Great news! You've been invited for an interview for {job}."),
+        "offer_extended": ("Job Offer Received!", "Congratulations! You have received a job offer for {job}."),
+        "hired": ("Hired! 🎊", "Welcome aboard! You have been hired for {job}."),
+        "rejected": ("Application Update", "The company has decided not to move forward with your application for {job}."),
+    }
+    
+    if new_stage in stage_labels:
+        stu_q = await db.execute(
+            text("""
+                SELECT u.user_id, u.email, j.title AS job_title 
+                FROM applications a
+                JOIN students s ON s.student_id = a.student_id
+                JOIN users u ON u.user_id = s.user_id
+                JOIN jobs j ON j.job_id = a.job_id
+                WHERE a.application_id = :aid
+            """),
+            {"aid": application_id},
+        )
+        stu = stu_q.mappings().first()
+        if stu:
+            title_tpl, msg_tpl = stage_labels[new_stage]
+            await create_notification(
+                db, stu["user_id"], "application_update",
+                title_tpl,
+                msg_tpl.format(job=stu["job_title"]),
+                email=stu["email"],
+                action_url="/student/jobs?tab=applications",
+                action_text="View Updates",
+                reference_type="application", reference_id=application_id,
+            )
+
     await db.commit()
 
     return {"success": True, "application_id": application_id, "stage": new_stage}

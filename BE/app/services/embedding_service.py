@@ -137,7 +137,7 @@ async def generate_student_embedding(student_id: int) -> Optional[dict]:
         # Skills from student_skills join
         skills_q = await session.execute(
             sql_text("""
-                SELECT s.skill_name
+                SELECT s.name
                 FROM student_skills ss
                 JOIN skills s ON s.skill_id = ss.skill_id
                 WHERE ss.student_id = :sid
@@ -165,7 +165,7 @@ async def generate_student_embedding(student_id: int) -> Optional[dict]:
                 SELECT c.title
                 FROM enrollments e
                 JOIN courses c ON c.course_id = e.course_id
-                WHERE e.student_id = :sid AND e.status = 'active'
+                WHERE e.student_id = :sid AND e.status = 'in_progress'
                 ORDER BY e.enrolled_at DESC
             """),
             {"sid": student_id},

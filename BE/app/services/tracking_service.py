@@ -532,10 +532,36 @@ class TrackingService:
     ) -> None:
         """Create notification queue entries for important activities."""
         from app.services.notification_service import create_notification
+        from app.db.postgres import async_session_factory
+        from app.models.user import Student
+        from sqlalchemy import select
+
+        # Resolve user_id and email from student_id
+        user_id = None
+        email = None
+        try:
+            from app.models.user import User
+            async with async_session_factory() as session:
+                q = await session.execute(
+                    select(Student.user_id, User.email)
+                    .join(User, User.user_id == Student.user_id)
+                    .where(Student.student_id == event.student_id)
+                )
+                row = q.first()
+                if row:
+                    user_id, email = row
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning(f"Could not resolve user_id/email for notification: {e}")
+            user_id = event.student_id
+
+        if not user_id:
+            return
 
         if event.activity_type == ActivityType.COURSE_COMPLETED:
             await create_notification(
-                user_id=event.student_id,
+                user_id=user_id,
+                email=email,
                 notification_type="course_completed",
                 title="🎉 Course Completed!",
                 body="Congratulations! You've completed a course. Keep up the great work!",
@@ -549,7 +575,8 @@ class TrackingService:
                 passed = event.details.quiz_result.passed
             if passed:
                 await create_notification(
-                    user_id=event.student_id,
+                    user_id=user_id,
+                    email=email,
                     notification_type="quiz_passed",
                     title="✅ Quiz Passed!",
                     body=f"Great job! You scored {score}% on the quiz.",

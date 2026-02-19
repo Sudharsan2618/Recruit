@@ -43,6 +43,9 @@ class Settings(BaseSettings):
     RAZORPAY_KEY_ID: str = os.getenv("RAZORPAY_KEY_ID", "")
     RAZORPAY_KEY_SECRET: str = os.getenv("RAZORPAY_KEY_SECRET", "")
 
+    # ── Novu (Notification System) ──
+    NOVU_API_KEY: str = os.getenv("NOVU_API_KEY", "")
+
     @property
     def DATABASE_URL(self) -> str:
         return (

@@ -1,6 +1,6 @@
 # RecruitLMS — Implementation Progress Tracker
 
-*Last updated: February 13, 2026*
+*Last updated: February 18, 2026*
 
 ---
 
@@ -27,7 +27,7 @@
 | 1.17 | FE: Student/Company layout auth guards + onboarding redirect | ✅ Done | Feb 12 |
 | 1.18 | Audio + Image lesson types in Player | ⬜ Pending | — |
 | 1.19 | Course Reviews API | ⬜ Pending | — |
-| 1.20 | Payment Integration (Razorpay) | ⬜ Pending | — |
+| 1.20 | Payment Integration (Razorpay) | ✅ Done | Feb 14 |
 | 1.21 | Student Profile API (`GET/PUT /auth/profile/student`) | ✅ Done | Feb 12 |
 | 1.22 | Company Profile API (`GET/PUT /auth/profile/company`) | ✅ Done | Feb 12 |
 | 1.23 | FE: Student Profile page wired to real API | ✅ Done | Feb 12 |
@@ -48,11 +48,11 @@
 | 2.8 | Embedding service migrated to Gemini REST API (`gemini-embedding-001`) | ✅ Done | Feb 12 |
 | 2.9 | pgvector Vector type fix (bind_processor for writes) | ✅ Done | Feb 12 |
 | 2.10 | Application SQLAlchemy Model (`BE/app/models/application.py`) | ✅ Done | Feb 13 |
-| 2.11 | Job Matching Service — pgvector cosine similarity (`BE/app/services/matching_service.py`) | ✅ Done | Feb 13 |
-| 2.12 | Student Job Schemas — Pydantic (`BE/app/schemas/student_jobs.py`) | ✅ Done | Feb 13 |
-| 2.13 | Student Jobs API (`GET /student-jobs`, `GET /student-jobs/recommended`, `GET /student-jobs/{id}`, `POST /student-jobs/{id}/apply`, `GET /student-jobs/applications/me`) | ✅ Done | Feb 13 |
-| 2.14 | FE: Student Jobs API functions in `api.ts` | ✅ Done | Feb 13 |
-| 2.15 | FE: Student Jobs page rewrite — recommended section + all jobs + filters + job detail sheet + apply dialog + my applications tab | ✅ Done | Feb 13 |
+| 2.11 | Job Matching Service — **upgraded to 3-stage hybrid matching** (vector 35% + skills 35% + exp 20% + prefs 10%) | ✅ Done | Feb 18 |
+| 2.12 | Student Job Schemas — Pydantic + `MatchBreakdown`, `MatchedSkill`, `MissingSkill`, `SkillSummary`, `GapCourse` | ✅ Done | Feb 18 |
+| 2.13 | Student Jobs API (composite scoring, skill gap analysis, course recommendations) | ✅ Done | Feb 18 |
+| 2.14 | FE: Student Jobs API functions + hybrid matching types in `api.ts` | ✅ Done | Feb 18 |
+| 2.15 | FE: Student Jobs page — composite match badges, 4-signal breakdown bars, skill match display, gap courses section | ✅ Done | Feb 18 |
 | 2.16 | Seed job data | ⬜ Pending | — |
 
 ## Phase 3: Admin Portal
@@ -70,8 +70,8 @@
 | 3.9 | FE: User Management page (search, filters, table, actions) | ✅ Done | Feb 13 |
 | 3.10 | Course Management — BE admin CRUD API (list/publish/unpublish/delete) | ✅ Done | Feb 13 |
 | 3.11 | FE: Course Management page (search, filters, table, publish toggle, delete) | ✅ Done | Feb 13 |
-| 3.12 | Job Matching Hub — BE endpoints (list jobs, list applicants, bulk approve, update status) | ✅ Done | Feb 13 |
-| 3.13 | FE: Job Matching Hub — two-level view (jobs list → applicants with match%, bulk forward) | ✅ Done | Feb 13 |
+| 3.12 | Job Matching Hub — BE endpoints (list jobs, list applicants with **composite scores**, bulk approve, update status) | ✅ Done | Feb 18 |
+| 3.13 | FE: Job Matching Hub — two-level view (jobs list → applicants with **composite match breakdown**, skill analysis, bulk forward) | ✅ Done | Feb 18 |
 | 3.14 | Company Candidates — BE forwarded profiles endpoint | ✅ Done | Feb 13 |
 | 3.15 | FE: Company Candidates page — Kanban pipeline with stage transitions | ✅ Done | Feb 13 |
 | 3.16 | Pagination — reusable TablePagination component | ✅ Done | Feb 13 |
@@ -241,3 +241,43 @@
 - `UI/app/student/courses/[slug]/page.tsx` — Added `id="reviews"` anchor div + auto-scroll useEffect for #reviews hash
 - `UI/app/student/player/page.tsx` — Added Review + Details buttons in actions panel for 100% complete courses; certificate banner
 - `UI/lib/api.ts` — Added `certificate_issued`, `certificate_url`, `certificate_issued_at` to `EnrollmentOut` interface
+
+## Files Modified/Created — Session 8 (Razorpay Payment Integration)
+
+### Backend (BE)
+- `BE/app/models/payment.py` — NEW: Payment SQLAlchemy model (full payments table mapping with gateway fields, tax, billing, invoice)
+- `BE/app/schemas/payment.py` — NEW: Pydantic schemas (CreateOrderRequest, VerifyPaymentRequest, OrderResponse, VerifyPaymentResponse, PaymentOut, PaymentHistoryResponse)
+- `BE/app/services/payment_service.py` — NEW: Razorpay service (create_order with SDK, verify_payment with HMAC-SHA256, get_payment_history); handles enrollment creation, embedding trigger, and notification on successful payment
+- `BE/app/api/v1/endpoints/payments.py` — NEW: Payment endpoints (POST /payments/create-order, POST /payments/verify, GET /payments/history) — all JWT-protected
+- `BE/app/api/v1/router.py` — Registered payments router
+- `BE/app/config.py` — Added RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET settings
+- `BE/requirements.txt` — Added `razorpay==1.4.2`
+- `BE/.env` — Razorpay test API keys (key_id + key_secret)
+
+### Frontend (UI)
+- `UI/.env.local` — NEW: Created with NEXT_PUBLIC_RAZORPAY_KEY_ID and NEXT_PUBLIC_API_URL
+- `UI/lib/api.ts` — Added payment types (PaymentOrderResponse, VerifyPaymentResponse, PaymentRecord, PaymentHistoryResponse) + functions (createPaymentOrder, verifyPayment, getPaymentHistory, loadRazorpayScript)
+- `UI/app/student/courses/[slug]/page.tsx` — Replaced mock payment dialog with real Razorpay Checkout integration; added payment error display, test mode card hint, processing state
+
+### Database (DB)
+- Existing `payments` table used as-is (already had gateway_name, gateway_payment_id, gateway_order_id, gateway_signature, gateway_response columns)
+- Existing `enrollments.payment_id` column used to link paid enrollments to payment records
+
+## Files Modified/Created — Session 9 (Hybrid Matching Upgrade)
+
+### Backend (BE)
+- `BE/app/services/matching_service.py` — REWRITTEN: 3-stage hybrid matching pipeline (vector retrieval → composite scoring → skill gap analysis). 4 signals: semantic (35%), skill overlap (35%), experience fit (20%), preference fit (10%). Threshold-based ≥65% composite, not top-N.
+- `BE/app/schemas/student_jobs.py` — UPDATED: Added `MatchBreakdown`, `MatchedSkill`, `MissingSkill`, `SkillSummary`, `GapCourse` schemas. Updated `JobListItem` and `JobDetail` with match breakdown fields.
+- `BE/app/api/v1/endpoints/student_jobs.py` — UPDATED: All endpoints now return composite scores with per-signal breakdown. Apply endpoint uses composite score. Job detail includes skill gaps + course recommendations.
+
+### Frontend (UI)
+- `UI/lib/api.ts` — UPDATED: Added `MatchBreakdown`, `MatchedSkill`, `MissingSkill`, `SkillSummary`, `GapCourse` interfaces. Updated `JobListItem` and `JobDetailFull` types.
+- `UI/app/student/jobs/page.tsx` — REWRITTEN: Composite match badges, 4-signal breakdown bars (semantic/skills/experience/preferences), skill match display (green ✓ / red ✗), gap courses "Boost Your Match" section, course recommendations.
+
+### Planning
+- `MATCHING_UPGRADE_PLAN.md` — NEW: Detailed implementation plan for the matching system upgrade
+
+### Phase D — Admin Hub Update
+- `BE/app/api/v1/endpoints/admin.py` — UPDATED: `get_job_applicants()` now uses composite scoring (4-signal blend) instead of raw vector cosine. Each applicant includes `match_breakdown`, `matched_skills`, and `missing_skills`.
+- `UI/lib/api.ts` — UPDATED: `JobApplicant` interface extended with `match_breakdown`, `matched_skills`, `missing_skills` fields.
+- `UI/app/admin/matching/page.tsx` — UPDATED: Applicant rows now show composite match badge with hover tooltip (4-signal bars), matched/missing skill indicators (green ✅ / red ❌), and filter for composite score threshold.

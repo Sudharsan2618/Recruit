@@ -4,10 +4,13 @@ from datetime import datetime
 from decimal import Decimal
 from typing import List, Optional
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.models.course import QuizAttempt
+from app.models.user import Student
+from app.models.course import QuizAttempt, Course
 from app.repositories.course_repository import CourseRepository
+from app.services.notification_service import create_notification
 from app.schemas.course import (
     CourseListItem, CourseListResponse, CourseDetail,
     ModuleOut, LessonBrief, LessonOut, CategoryOut, InstructorBrief,
@@ -258,6 +261,35 @@ class CourseService:
             raise ValueError("Already enrolled in this course")
 
         enrollment = await self.repo.create_enrollment(student_id, course_id)
+
+        # Trigger Notification
+        try:
+            from app.models.user import User
+            # Get user_id, email and course name
+            data_q = await self.repo.db.execute(
+                select(Student.user_id, User.email)
+                .join(User, User.user_id == Student.user_id)
+                .where(Student.student_id == student_id)
+            )
+            row = data_q.first()
+            user_id, email = (row[0], row[1]) if row else (None, None)
+            
+            course_q = await self.repo.db.execute(select(Course.title).where(Course.course_id == course_id))
+            course_title = course_q.scalar() or "New Course"
+
+            if user_id:
+                await create_notification(
+                    user_id=user_id,
+                    email=email,
+                    notification_type="course_enrollment",
+                    title="🎉 Enrolled Successfully!",
+                    body=f"You have successfully enrolled in {course_title}. Start learning now!",
+                    metadata={"course_id": course_id}
+                )
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).error(f"Failed to send enrollment notification: {e}")
+
         return EnrollmentOut(
             enrollment_id=enrollment.enrollment_id,
             student_id=enrollment.student_id,

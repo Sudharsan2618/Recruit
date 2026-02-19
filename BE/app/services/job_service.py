@@ -142,6 +142,13 @@ class JobService:
 
         await self.db.commit()
 
+        # If job is active, notify matching students in the background
+        if job.status == "active":
+            try:
+                await self.notify_matching_students(job.job_id, job.title, company.company_name)
+            except Exception as e:
+                logger.error(f"Failed to send matching alerts: {e}")
+
         return {
             "job_id": job.job_id,
             "company_id": company.company_id,
@@ -317,3 +324,47 @@ class JobService:
             })
 
         return out
+
+    async def notify_matching_students(self, job_id: int, title: str, company_name: str):
+        """Find students whose skills match this job and send them a Novu alert."""
+        # Find students with > 0.6 vector similarity
+        # We use a slightly higher threshold here to avoid spamming
+        query = text("""
+            SELECT s.user_id, s.first_name, u.email,
+                   ROUND((1.0 - (je.embedding <=> se.embedding))::numeric, 4) AS match_score
+            FROM job_embeddings je
+            CROSS JOIN student_embeddings se
+            JOIN students s ON s.student_id = se.student_id
+            JOIN users u ON u.user_id = s.user_id
+            WHERE je.job_id = :jid
+              AND (1.0 - (je.embedding <=> se.embedding)) >= 0.6
+            ORDER BY match_score DESC
+            LIMIT 50
+        """)
+        
+        result = await self.db.execute(query, {"jid": job_id})
+        matches = result.mappings().all()
+        
+        if not matches:
+            return
+
+        from app.api.v1.endpoints.notifications import create_notification
+        
+        for m in matches:
+            try:
+                await create_notification(
+                    self.db,
+                    user_id=m["user_id"],
+                    email=m["email"],
+                    notification_type="job_match",
+                    title="🎯 New Job Match!",
+                    message=f"Hi {m['first_name'] or 'there'}, we found a new job at {company_name} that matches your skills: {title}",
+                    action_url=f"/student/jobs/{job_id}",
+                    action_text="View Match",
+                    reference_type="job",
+                    reference_id=job_id
+                )
+            except Exception as e:
+                logger.warning(f"Failed to notify student {m['user_id']} for job match: {e}")
+        
+        await self.db.commit()

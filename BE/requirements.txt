@@ -42,3 +42,6 @@ pgvector==0.3.6
 
 # Payment Gateway
 razorpay==1.4.2
+
+# Notifications
+novu==1.14.0

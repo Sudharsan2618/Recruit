@@ -62,12 +62,15 @@ import {
   updateLessonProgress,
   getStudentAnalytics,
   getEnrollments,
+  enrollInCourse,
+  submitQuiz,
   issueCertificate,
   getCertificateViewUrl,
   type CourseDetail, 
   type LessonFull, 
   type LessonBrief, 
   type QuizOut,
+  type QuizResultOut,
   type LessonProgressOut,
   type StudentActivitySummary,
   type EnrollmentOut
@@ -234,9 +237,14 @@ export default function CoursePlayer() {
   const [sessionId, setSessionId] = useState<string | null>(null)
   const [analytics, setAnalytics] = useState<StudentActivitySummary | null>(null)
   const videoTimeRef = useRef<number>(0)
+  const maxWatchedTimeRef = useRef<number>(0)
   const videoRef = useRef<HTMLVideoElement | null>(null)
   const watchedRangesRef = useRef<[number, number][]>([])
   const lastReportedTimeRef = useRef<number>(0)
+
+  // Tracks lesson IDs for which we've already fired the one-time "lesson_completed" event
+  // Prevents duplicate MongoDB analytics when auto-complete triggers repeatedly (e.g. video 20s ticks)
+  const completionTrackedRef = useRef<Set<number>>(new Set())
 
   // Code Playground State
   const [codePlaygroundOpen, setCodePlaygroundOpen] = useState(false)
@@ -265,9 +273,6 @@ export default function CoursePlayer() {
 
         if (data.modules.length > 0) {
           setExpandedModules([data.modules[0].module_id])
-          if (data.modules[0].lessons.length > 0) {
-            await loadLesson(data.modules[0].lessons[0].lesson_id, data)
-          }
         }
       } catch (err) {
         setError(err instanceof Error ? err.message : "Failed to load course")
@@ -278,11 +283,18 @@ export default function CoursePlayer() {
     fetchCourse()
   }, [slug, router])
 
+  // Track if initial load is done to prevent reloading lesson unnecessarily
+  const initialLessonLoadedRef = useRef(false)
+  // Guard to prevent duplicate initTracking runs (React StrictMode fires effects twice)
+  const initTrackingStartedRef = useRef(false)
+
   // Dual-Path Initialization: PostgreSQL (Progress) & MongoDB (Analytics)
   useEffect(() => {
     const activeUser = user;
     const activeCourse = course;
     if (!activeUser || !activeCourse) return;
+    if (initTrackingStartedRef.current) return;
+    initTrackingStartedRef.current = true;
 
     async function initTracking(u: NonNullable<typeof user>, c: NonNullable<typeof course>) {
       // 1. Initialize MongoDB Tracking Session
@@ -300,22 +312,47 @@ export default function CoursePlayer() {
         console.warn("Failed to start tracking session:", trackingErr)
       }
 
-      // 2. Fetch existing progress from PostgreSQL (Current State)
+      // 2. Ensure enrollment exists (must happen BEFORE progress fetch)
+      try {
+        if (u.student_id) {
+          const enrolls = await getEnrollments(u.student_id)
+          let existing = enrolls.find((e) => e.course_id === c.course_id)
+          if (!existing) {
+            // Auto-enroll so progress tracking can work
+            try {
+              existing = await enrollInCourse(c.course_id, u.student_id)
+            } catch {
+              // 409 = already enrolled (race condition) — re-fetch to get the enrollment
+              const retryEnrolls = await getEnrollments(u.student_id)
+              existing = retryEnrolls.find((e) => e.course_id === c.course_id) || undefined
+            }
+          }
+          if (existing) setEnrollment(existing)
+        }
+      } catch (eErr) {
+        console.warn("Failed to fetch/create enrollment", eErr)
+      }
+
+      // 3. Fetch PostgreSQL lesson progress (requires enrollment to exist)
+      let fetchedProgressMap: Record<number, LessonProgressOut> = {}
       try {
         if (u.student_id) {
           const progress = await getCourseProgress(u.student_id, c.course_id)
           const completedIds = new Set(progress.filter(p => p.is_completed).map(p => p.lesson_id))
-          const progressMap: Record<number, LessonProgressOut> = {}
-          progress.forEach(p => { progressMap[p.lesson_id] = p })
+          progress.forEach(p => { fetchedProgressMap[p.lesson_id] = p })
           
+          // Seed completionTrackedRef so we don't re-fire lesson_completed events
+          // for lessons that were already completed in previous sessions
+          completedIds.forEach(id => completionTrackedRef.current.add(id))
+
           setCompletedLessons(completedIds)
-          setLessonProgressMap(progressMap)
+          setLessonProgressMap(fetchedProgressMap)
         }
       } catch (pErr) {
         console.warn("Failed to fetch course progress", pErr)
       }
 
-      // 3. Fetch MongoDB Analytics Summary (History/Aggregation)
+      // 4. Fetch MongoDB Analytics Summary (History/Aggregation)
       try {
         if (u.student_id) {
           const summary = await getStudentAnalytics(u.student_id, c.course_id)
@@ -325,15 +362,27 @@ export default function CoursePlayer() {
         console.warn("Failed to fetch student analytics", aErr)
       }
 
-      // 4. Fetch enrollment for certificate status
-      try {
-        if (u.student_id) {
-          const enrolls = await getEnrollments(u.student_id)
-          const existing = enrolls.find((e) => e.course_id === c.course_id)
-          if (existing) setEnrollment(existing)
+      // 5. Autoload the first lesson now that progress map is available
+      if (c.modules.length > 0 && c.modules[0].lessons.length > 0 && !initialLessonLoadedRef.current) {
+        initialLessonLoadedRef.current = true
+        // Important: we pass the newly fetched progressMap so loadLesson has the correct saved position
+        let firstLessonId = c.modules[0].lessons[0].lesson_id
+        
+        // Find the first uncompleted lesson, or default to first lesson
+        let found = false
+        for (const mod of c.modules) {
+          for (const les of mod.lessons) {
+             const prog = fetchedProgressMap[les.lesson_id]
+             if (!prog?.is_completed) {
+                firstLessonId = les.lesson_id
+                found = true
+                break
+             }
+          }
+          if (found) break
         }
-      } catch (eErr) {
-        console.warn("Failed to fetch enrollment", eErr)
+
+        await loadLesson(firstLessonId, c, fetchedProgressMap)
       }
     }
 
@@ -368,11 +417,16 @@ export default function CoursePlayer() {
         if (data?.event === "onStateChange" && data?.info != null) {
           // state 0 = ended, 1 = playing, 2 = paused
           if (data.info === 0 && currentLesson && user?.student_id && course) {
-            // Video ended — fire final tracking
+            // Video ended — fire final tracking segment
             const totalDuration = (currentLesson.duration_minutes || 0) * 60
             if (totalDuration > 0) {
               watchedRangesRef.current.push([lastReportedTimeRef.current, totalDuration])
             }
+            // Auto-mark complete when video ends
+            markLessonCompleted(currentLesson.lesson_id, {
+              progress_percentage: 100,
+              video_position_seconds: Math.floor(totalDuration),
+            })
           }
         }
       } catch { /* ignore non-JSON messages */ }
@@ -397,48 +451,116 @@ export default function CoursePlayer() {
     // Timer to sync video position every 20 seconds
     const interval = setInterval(() => {
       const currentTime = videoTimeRef.current
+      if (currentTime > maxWatchedTimeRef.current) {
+         maxWatchedTimeRef.current = currentTime
+      }
+      
       if (currentTime > 0 && user?.student_id) {
         // Record watched range segment
         const lastTime = lastReportedTimeRef.current
         if (currentTime > lastTime) {
           watchedRangesRef.current.push([Math.floor(lastTime), Math.floor(currentTime)])
-        } else if (currentTime < lastTime) {
-          // User seeked backward — start a new range from current position
-          // The previous range was already recorded
         }
+        
+        let deltaSeconds = 0
+        if (currentTime > lastTime) {
+          deltaSeconds = currentTime - lastTime
+        }
+        
         lastReportedTimeRef.current = currentTime
 
-        // Compute unique seconds from merged ranges
+        // Compute unique seconds from merged ranges for total percentage
         const uniqueSeconds = totalUniqueSeconds(watchedRangesRef.current)
         const totalDuration = (currentLesson.duration_minutes || 0) * 60
+        const currentPercentage = totalDuration > 0 ? Math.min(100, Math.round((uniqueSeconds / totalDuration) * 100)) : 0
+        const isAutoCompleted = currentPercentage >= 95
 
-        // Path A: PostgreSQL (State update for Resume function)
-        updateLessonProgress(user.student_id, course.course_id, {
-          lesson_id: currentLesson.lesson_id,
-          video_position_seconds: Math.floor(currentTime),
-          time_spent_seconds: Math.floor(uniqueSeconds)
-        }).catch(() => {})
+        if (deltaSeconds > 0) {
+          // Path A: PostgreSQL (State update for Resume function)
+          // time_spent_seconds is a DELTA, the backend upsert `+=` this value
+          updateLessonProgress(user.student_id, course.course_id, {
+            lesson_id: currentLesson.lesson_id,
+            video_position_seconds: Math.floor(currentTime),
+            time_spent_seconds: Math.floor(deltaSeconds),
+            progress_percentage: currentPercentage,
+            is_completed: isAutoCompleted
+          }).catch(() => {})
 
-        // Path B: MongoDB (Granular xAPI log)
-        trackActivity({
-          student_id: user.student_id,
-          course_id: course.course_id,
-          lesson_id: currentLesson.lesson_id,
-          activity_type: "video_watched",
-          session_id: sessionId || undefined,
-          details: {
-            video_progress: {
-              current_time_seconds: Math.floor(currentTime),
-              total_duration_seconds: totalDuration,
-              percentage_watched: totalDuration > 0 ? (uniqueSeconds / totalDuration) * 100 : 0
+          // Dynamically update UI state to reflect progress immediately
+          setLessonProgressMap(prev => {
+            const existing = prev[currentLesson.lesson_id] || {} as any
+            return {
+              ...prev,
+              [currentLesson.lesson_id]: { 
+                ...existing, 
+                progress_percentage: currentPercentage,
+                video_position_seconds: Math.floor(currentTime),
+                is_completed: existing.is_completed || isAutoCompleted
+              }
+            }
+          })
+
+          if (isAutoCompleted) {
+            setCompletedLessons(prev => {
+              if (!prev.has(currentLesson.lesson_id)) {
+                const next = new Set(prev)
+                next.add(currentLesson.lesson_id)
+                return next
+              }
+              return prev
+            })
+
+            // Fire one-time lesson_completed + course_completed tracking
+            if (!completionTrackedRef.current.has(currentLesson.lesson_id)) {
+              completionTrackedRef.current.add(currentLesson.lesson_id)
+              trackActivity({
+                student_id: user.student_id,
+                course_id: course.course_id,
+                lesson_id: currentLesson.lesson_id,
+                activity_type: "lesson_completed",
+                session_id: sessionId || undefined,
+              }).catch(console.warn)
+              getStudentAnalytics(user.student_id, course.course_id).then(setAnalytics).catch(() => {})
+              const allLessons = course.modules.flatMap(m => m.lessons)
+              if (completedLessons.size + 1 >= allLessons.length) {
+                trackActivity({
+                  student_id: user.student_id,
+                  course_id: course.course_id,
+                  activity_type: "course_completed",
+                  session_id: sessionId || undefined,
+                }).catch(console.warn)
+              }
             }
           }
-        }).catch(() => {})
+
+          setAnalytics(prev => {
+            if (!prev) return prev
+            return { ...prev, total_time_spent_seconds: prev.total_time_spent_seconds + deltaSeconds }
+          })
+
+          // Path B: MongoDB (Granular xAPI log)
+          trackActivity({
+            student_id: user.student_id,
+            course_id: course.course_id,
+            lesson_id: currentLesson.lesson_id,
+            activity_type: "video_watched",
+            session_id: sessionId || undefined,
+            details: {
+              time_spent_seconds: Math.floor(deltaSeconds),
+              video_progress: {
+                current_time_seconds: Math.floor(currentTime),
+                total_duration_seconds: totalDuration,
+                percentage_watched: currentPercentage
+              }
+            }
+          }).catch(() => {})
+        }
       }
     }, 20000)
 
     return () => clearInterval(interval)
   }, [currentLesson, sessionId, user, course])
+
 
   // Cleanup session on unmount
   useEffect(() => {
@@ -448,6 +570,154 @@ export default function CoursePlayer() {
       }
     }
   }, [sessionId])
+
+  // ── Flush unsaved video progress immediately ──
+  // Called on: beforeunload, lesson switch, and component unmount
+  // Uses refs (not state) so it works reliably in event handlers and cleanup
+  const flushVideoProgress = useCallback(() => {
+    const currentTime = videoTimeRef.current
+    const lastTime = lastReportedTimeRef.current
+    if (
+      currentTime <= 0 ||
+      currentTime <= lastTime ||
+      !user?.student_id ||
+      !course ||
+      !currentLesson ||
+      currentLesson.content_type !== "video"
+    ) return
+
+    const deltaSeconds = currentTime - lastTime
+    if (deltaSeconds <= 0) return
+
+    // Record final watched segment
+    watchedRangesRef.current.push([Math.floor(lastTime), Math.floor(currentTime)])
+    lastReportedTimeRef.current = currentTime
+
+    const uniqueSeconds = totalUniqueSeconds(watchedRangesRef.current)
+    const totalDuration = (currentLesson.duration_minutes || 0) * 60
+    const currentPercentage = totalDuration > 0 ? Math.min(100, Math.round((uniqueSeconds / totalDuration) * 100)) : 0
+    const isAutoCompleted = currentPercentage >= 95
+
+    // Use navigator.sendBeacon for reliability on page unload
+    // Fall back to fetch for normal lesson switches
+    const payload = {
+      lesson_id: currentLesson.lesson_id,
+      video_position_seconds: Math.floor(currentTime),
+      time_spent_seconds: Math.floor(deltaSeconds),
+      progress_percentage: currentPercentage,
+      is_completed: isAutoCompleted,
+    }
+
+    // Try sendBeacon first (works during unload), fall back to fetch
+    const apiBase = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api/v1'
+    const url = `${apiBase}/students/enrollments/${course.course_id}/progress?student_id=${user.student_id}`
+    const beaconData = JSON.stringify(payload)
+    const sent = typeof navigator.sendBeacon === 'function' &&
+      navigator.sendBeacon(url, new Blob([beaconData], { type: 'application/json' }))
+    if (!sent) {
+      updateLessonProgress(user.student_id, course.course_id, payload).catch(() => {})
+    }
+
+    // Update local state
+    setLessonProgressMap(prev => {
+      const existing = prev[currentLesson.lesson_id] || {} as any
+      return {
+        ...prev,
+        [currentLesson.lesson_id]: {
+          ...existing,
+          progress_percentage: currentPercentage,
+          video_position_seconds: Math.floor(currentTime),
+          is_completed: existing.is_completed || isAutoCompleted,
+        }
+      }
+    })
+  }, [user, course, currentLesson])
+
+  // ── Auto-mark lesson as completed (one-way, idempotent) ──
+  // Used by: video auto-complete, PDF/PPT timer, quiz pass, coding practice
+  const markLessonCompleted = useCallback(async (lessonId: number, extraProgress?: { progress_percentage?: number; video_position_seconds?: number; time_spent_seconds?: number }) => {
+    if (completedLessons.has(lessonId)) return
+    if (!course || !user?.student_id) return
+
+    // 1. Persist to PostgreSQL
+    try {
+      const existing = lessonProgressMap[lessonId]
+      await updateLessonProgress(user.student_id, course.course_id, {
+        lesson_id: lessonId,
+        is_completed: true,
+        progress_percentage: extraProgress?.progress_percentage ?? 100,
+        video_position_seconds: extraProgress?.video_position_seconds ?? existing?.video_position_seconds ?? 0,
+        time_spent_seconds: extraProgress?.time_spent_seconds ?? 0,
+      })
+    } catch (err) {
+      console.error("Failed to mark lesson complete:", err)
+      return
+    }
+
+    // 2. Update local state
+    setCompletedLessons(prev => {
+      const next = new Set(prev)
+      next.add(lessonId)
+      return next
+    })
+    setLessonProgressMap(prev => ({
+      ...prev,
+      [lessonId]: { ...prev[lessonId], is_completed: true, progress_percentage: extraProgress?.progress_percentage ?? 100 } as any
+    }))
+
+    // 3. Track lesson_completed activity (MongoDB) — once per lesson
+    if (!completionTrackedRef.current.has(lessonId)) {
+      completionTrackedRef.current.add(lessonId)
+      trackActivity({
+        student_id: user.student_id,
+        course_id: course.course_id,
+        lesson_id: lessonId,
+        activity_type: "lesson_completed",
+        session_id: sessionId || undefined,
+      }).catch(console.warn)
+
+      // Refresh analytics
+      getStudentAnalytics(user.student_id, course.course_id).then(setAnalytics).catch(() => {})
+
+      // 4. Check for course completion
+      const allLessons = course.modules.flatMap(m => m.lessons)
+      if (completedLessons.size + 1 >= allLessons.length) {
+        trackActivity({
+          student_id: user.student_id,
+          course_id: course.course_id,
+          activity_type: "course_completed",
+          session_id: sessionId || undefined,
+        }).catch(console.warn)
+      }
+    }
+  }, [completedLessons, course, user, sessionId, lessonProgressMap])
+
+  // ── PDF/PPT/Document auto-complete after 5 seconds ──
+  useEffect(() => {
+    if (!currentLesson || !user?.student_id || !course) return
+    if (currentLesson.content_type !== "pdf") return
+    if (completedLessons.has(currentLesson.lesson_id)) return
+
+    const lessonId = currentLesson.lesson_id
+    const timer = setTimeout(() => {
+      markLessonCompleted(lessonId, { time_spent_seconds: 5 })
+    }, 5000)
+
+    return () => clearTimeout(timer)
+  }, [currentLesson?.lesson_id, currentLesson?.content_type, user?.student_id, course?.course_id, completedLessons, markLessonCompleted])
+
+  // ── Save progress on tab close / refresh / navigate away ──
+  useEffect(() => {
+    function handleBeforeUnload() {
+      flushVideoProgress()
+    }
+    window.addEventListener('beforeunload', handleBeforeUnload)
+    window.addEventListener('pagehide', handleBeforeUnload)
+    return () => {
+      window.removeEventListener('beforeunload', handleBeforeUnload)
+      window.removeEventListener('pagehide', handleBeforeUnload)
+    }
+  }, [flushVideoProgress])
 
   // Save note handler
   function handleSaveNote() {
@@ -472,19 +742,31 @@ export default function CoursePlayer() {
     }
   }
 
-  async function loadLesson(lessonId: number, courseData?: CourseDetail) {
+  async function loadLesson(lessonId: number, courseData?: CourseDetail, progressMapInitial?: Record<number, LessonProgressOut>) {
+    // Flush any unsaved progress from the PREVIOUS video before switching
+    flushVideoProgress()
+
     try {
       setLessonLoading(true)
       setQuizStarted(false)
       setQuizSubmitted(false)
       setQuizAnswers({})
       setQuizResult(null)
-      videoTimeRef.current = 0
-      lastReportedTimeRef.current = 0
-      watchedRangesRef.current = []
       
       const lesson = await getLesson(lessonId)
       setCurrentLesson(lesson)
+
+      // Get saved position for smart seeking initialization
+      const mapToUse = progressMapInitial || lessonProgressMap
+      const progressMap = mapToUse[lessonId]
+      const savedPos = progressMap?.video_position_seconds || 0
+      maxWatchedTimeRef.current = savedPos
+
+      // Initialize tracking refs to saved position so the first 20s tick
+      // computes deltaSeconds correctly (new watch time only, not replay of saved portion)
+      videoTimeRef.current = savedPos
+      lastReportedTimeRef.current = savedPos
+      watchedRangesRef.current = savedPos > 0 ? [[0, savedPos]] : []
 
       // Track Activity: Lesson Started (MongoDB)
       const activeCourse = courseData || course;
@@ -547,55 +829,16 @@ export default function CoursePlayer() {
 
   async function handleMarkComplete() {
     if (!currentLesson || !course || !user?.student_id) return
-    const isCompleted = completedLessons.has(currentLesson.lesson_id)
-    const newCompleted = !isCompleted
+    const alreadyCompleted = completedLessons.has(currentLesson.lesson_id)
 
-    // 1. Persist to PostgreSQL first — only update UI on success
-    try {
-      await updateLessonProgress(user.student_id, course.course_id, {
-        lesson_id: currentLesson.lesson_id,
-        is_completed: newCompleted
+    if (!alreadyCompleted) {
+      // Mark as complete using the shared helper (handles backend, UI, tracking)
+      await markLessonCompleted(currentLesson.lesson_id, {
+        video_position_seconds: lessonProgressMap[currentLesson.lesson_id]?.video_position_seconds || Math.floor(videoTimeRef.current) || 0,
+        progress_percentage: lessonProgressMap[currentLesson.lesson_id] ? parseFloat(String(lessonProgressMap[currentLesson.lesson_id].progress_percentage)) : 100,
       })
-    } catch (err) {
-      console.error("Failed to update progress:", err)
-      return // Don't toggle UI if backend failed
     }
-
-    // 2. Update local state only after backend confirms
-    setCompletedLessons((prev) => {
-      const next = new Set(prev)
-      if (newCompleted) {
-        next.add(currentLesson.lesson_id)
-      } else {
-        next.delete(currentLesson.lesson_id)
-      }
-      return next
-    })
-
-    // 3. Track Activity: Lesson Completed (MongoDB Analytics Path)
-    if (newCompleted) {
-      trackActivity({
-        student_id: user.student_id,
-        course_id: course.course_id,
-        lesson_id: currentLesson.lesson_id,
-        activity_type: "lesson_completed",
-        session_id: sessionId || undefined
-      }).catch(console.warn)
-
-      // Refresh analytics summary after completion
-      getStudentAnalytics(user.student_id, course.course_id).then(setAnalytics).catch(() => {})
-
-      // Check for Course Completion
-      const allLessons = course.modules.flatMap((m) => m.lessons)
-      if (completedLessons.size + 1 === allLessons.length) {
-        trackActivity({
-          student_id: user.student_id,
-          course_id: course.course_id,
-          activity_type: "course_completed",
-          session_id: sessionId || undefined
-        }).catch(console.warn)
-      }
-    }
+    // Note: manual un-complete is removed — lessons complete one-way via auto-mechanisms
   }
 
   function handleNextLesson() {
@@ -623,25 +866,25 @@ export default function CoursePlayer() {
     }
   }
 
-  function handleQuizSubmit() {
-    if (!quizData || !course || !currentLesson) return
-    
-    let correctCount = 0
-    quizData.questions.forEach(q => {
-      if (quizAnswers[q.question_id] === 0) correctCount++
-    })
-    
-    const percentage = Math.round((correctCount / quizData.questions.length) * 100)
-    const passed = percentage >= parseFloat(quizData.pass_percentage)
-    
-    setQuizResult({
-      score: percentage,
-      passed: passed
-    })
-    setQuizSubmitted(true)
+  async function handleQuizSubmit() {
+    if (!quizData || !course || !currentLesson || !user?.student_id || !enrollment) return
 
-    // Track Activity: Quiz Submitted (MongoDB Analytics/xAPI Path)
-    if (user?.student_id) {
+    // Build answers map: { "question_id": selected_option_index }
+    const answersMap: Record<string, number | string> = {}
+    Object.entries(quizAnswers).forEach(([qId, optIdx]) => {
+      answersMap[qId] = optIdx
+    })
+
+    // Submit to backend for proper server-side grading
+    try {
+      const result = await submitQuiz(quizData.quiz_id, enrollment.enrollment_id, answersMap)
+      const percentage = parseFloat(result.percentage)
+      const passed = result.passed
+
+      setQuizResult({ score: percentage, passed })
+      setQuizSubmitted(true)
+
+      // Track Activity: Quiz Submitted (MongoDB Analytics/xAPI Path)
       trackActivity({
         student_id: user.student_id,
         course_id: course.course_id,
@@ -654,14 +897,20 @@ export default function CoursePlayer() {
             score: percentage,
             percentage: percentage,
             passed: passed,
-            time_taken_seconds: 60 
+            time_taken_seconds: 60
           }
         }
       }).catch(console.warn)
-    }
-    
-    if (passed) {
-      handleMarkComplete()
+
+      // Mark lesson complete only if passed (backend uses quiz.pass_percentage, typically 60%)
+      if (passed) {
+        await markLessonCompleted(currentLesson.lesson_id)
+      }
+    } catch (err) {
+      console.error("Quiz submission failed:", err)
+      // Fallback: show error to user
+      setQuizResult({ score: 0, passed: false })
+      setQuizSubmitted(true)
     }
   }
 
@@ -817,6 +1066,9 @@ export default function CoursePlayer() {
                         allowFullScreen
                         title={currentLesson.title}
                       />
+                      {/* Invisible overlay for YouTube to prevent clicking timeline but keep play/pause if needed 
+                          Note: With controls=0 this is largely handled, but provides extra safety */}
+                      <div className="absolute inset-0 z-10 pointer-events-none" />
                     </div>
                   )}
 
@@ -836,12 +1088,17 @@ export default function CoursePlayer() {
                         onTimeUpdate={(e) => {
                           if (!e.currentTarget.seeking) {
                             videoTimeRef.current = e.currentTarget.currentTime
+                            if (e.currentTarget.currentTime > maxWatchedTimeRef.current) {
+                              maxWatchedTimeRef.current = e.currentTarget.currentTime
+                            }
                           }
                         }}
                         onSeeking={(e) => {
-                          const delta = Math.abs(e.currentTarget.currentTime - videoTimeRef.current)
-                          if (delta > 1.5) {
-                            e.currentTarget.currentTime = videoTimeRef.current
+                          // Allow seeking backward freely, or forward up to max watched time
+                          const targetTime = e.currentTarget.currentTime
+                          if (targetTime > maxWatchedTimeRef.current + 2) {
+                            // Snap back to max watched time if trying to skip ahead
+                            e.currentTarget.currentTime = maxWatchedTimeRef.current
                           }
                         }}
                         onLoadedMetadata={(e) => {
@@ -858,6 +1115,13 @@ export default function CoursePlayer() {
                               Math.floor(lastReportedTimeRef.current),
                               Math.floor(ct)
                             ])
+                          }
+                          // Auto-mark complete when self-hosted video ends
+                          if (currentLesson) {
+                            markLessonCompleted(currentLesson.lesson_id, {
+                              progress_percentage: 100,
+                              video_position_seconds: Math.floor(ct),
+                            })
                           }
                         }}
                       />
@@ -1054,7 +1318,14 @@ export default function CoursePlayer() {
                     <div className="flex-1 flex flex-col min-h-[400px]">
                       {/* Code Playground — Primary Feature */}
                       <div className="px-4 pt-4 sm:px-6 lg:px-8">
-                        <CodePlayground lessonContent={currentLesson?.text_content ?? undefined} />
+                        <CodePlayground
+                          lessonContent={currentLesson?.text_content ?? undefined}
+                          onAllExercisesComplete={() => {
+                            if (currentLesson && !completedLessons.has(currentLesson.lesson_id)) {
+                              markLessonCompleted(currentLesson.lesson_id)
+                            }
+                          }}
+                        />
                       </div>
 
                       {/* Exercise Instructions — Collapsible reference below */}
@@ -1248,11 +1519,11 @@ export default function CoursePlayer() {
                           size="lg"
                           variant={currentLesson && completedLessons.has(currentLesson.lesson_id) ? "outline" : "default"}
                           onClick={handleMarkComplete}
-                          disabled={!currentLesson}
+                          disabled={!currentLesson || (currentLesson && completedLessons.has(currentLesson.lesson_id))}
                           className={cn(
                             "w-full h-11 font-semibold transition-all",
                             currentLesson && completedLessons.has(currentLesson.lesson_id) 
-                              ? "border-emerald-500/50 text-emerald-600 bg-emerald-50 hover:bg-emerald-100" 
+                              ? "border-emerald-500/50 text-emerald-600 bg-emerald-50 hover:bg-emerald-100 cursor-default opacity-100" 
                               : ""
                           )}
                         >
@@ -1416,6 +1687,14 @@ export default function CoursePlayer() {
                           <span className="text-[10px] font-medium text-muted-foreground">
                             {mod.duration_minutes || 0} Min
                           </span>
+                          {moduleLessons.length > 0 && moduleCompletedCount > 0 && (
+                            <>
+                              <span className="text-muted-foreground/30">•</span>
+                              <span className="text-[10px] font-semibold text-emerald-600">
+                                {Math.round((moduleCompletedCount / moduleLessons.length) * 100)}%
+                              </span>
+                            </>
+                          )}
                         </div>
                       </div>
 

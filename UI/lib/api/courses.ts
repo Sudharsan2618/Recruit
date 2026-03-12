@@ -1,5 +1,5 @@
 import { fetchApi, fetchApiWithAuth, API_BASE_URL } from './client';
-import { CourseListItem, CourseListResponse, CourseDetail, EnrollmentOut, ProgressUpdate, LessonProgressOut, CourseReview, ReviewStats, MaterialOut, AdminCourse } from './types';
+import { CourseListItem, CourseListResponse, CourseDetail, EnrollmentOut, ProgressUpdate, LessonProgressOut, CourseReview, ReviewStats, MaterialOut, AdminCourse, QuizResultOut } from './types';
 import * as T from './types';
 
 function capitalize(str: string) {
@@ -81,6 +81,20 @@ export async function updateLessonProgress(
     method: "POST",
     body: JSON.stringify(progress),
   });
+}
+
+export async function submitQuiz(
+  quizId: number,
+  enrollmentId: number,
+  answers: Record<string, number | string>
+): Promise<QuizResultOut> {
+  return fetchApiWithAuth<QuizResultOut>(
+    `/courses/quizzes/${quizId}/submit?enrollment_id=${enrollmentId}`,
+    {
+      method: "POST",
+      body: JSON.stringify({ answers }),
+    }
+  );
 }
 
 export function mapCourseToUI(course: CourseListItem) {

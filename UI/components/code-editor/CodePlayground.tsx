@@ -113,6 +113,7 @@ function parseSqlFromMarkdown(markdown: string): { label: string; query: string 
 
 interface CodePlaygroundProps {
   lessonContent?: string
+  onAllExercisesComplete?: () => void
 }
 
 const PYTHON_SAMPLES = [
@@ -215,7 +216,7 @@ async function executePython(code: string): Promise<{
 }
 
 // ── Component ──
-export default function CodePlayground({ lessonContent }: CodePlaygroundProps) {
+export default function CodePlayground({ lessonContent, onAllExercisesComplete }: CodePlaygroundProps) {
   // Parse lesson-specific SQL samples from markdown content
   const lessonSqlSamples = React.useMemo(() => {
     if (!lessonContent) return null
@@ -235,6 +236,8 @@ export default function CodePlayground({ lessonContent }: CodePlaygroundProps) {
   const [showSamples, setShowSamples] = useState(false)
   const [copied, setCopied] = useState(false)
   const [dbReady, setDbReady] = useState(false)
+  const [completedExercises, setCompletedExercises] = useState<Set<number>>(new Set())
+  const allExercisesCompleteRef = useRef(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const samplesRef = useRef<HTMLDivElement>(null)
 
@@ -279,6 +282,23 @@ export default function CodePlayground({ lessonContent }: CodePlaygroundProps) {
       if (language === "sql") {
         const res = await executeSql(code)
         setResult(res)
+
+        // Track exercise completion for lesson-specific exercises
+        if (res.success && lessonSqlSamples && lessonSqlSamples.length > 0) {
+          const matchIdx = lessonSqlSamples.findIndex(s => code.trim() === s.query.trim())
+          if (matchIdx >= 0) {
+            setCompletedExercises(prev => {
+              const next = new Set(prev)
+              next.add(matchIdx)
+              // Check if ALL exercises are now complete
+              if (next.size >= lessonSqlSamples.length && !allExercisesCompleteRef.current) {
+                allExercisesCompleteRef.current = true
+                onAllExercisesComplete?.()
+              }
+              return next
+            })
+          }
+        }
       } else {
         const res = await executePython(code)
         setPythonOutput(res)
@@ -286,7 +306,7 @@ export default function CodePlayground({ lessonContent }: CodePlaygroundProps) {
     } finally {
       setIsRunning(false)
     }
-  }, [code, language])
+  }, [code, language, lessonSqlSamples, onAllExercisesComplete])
 
   // Reset database
   const handleReset = async () => {
@@ -577,11 +597,29 @@ export default function CodePlayground({ lessonContent }: CodePlaygroundProps) {
       {/* ── Footer ── */}
       <div className="flex items-center justify-between px-4 py-1.5 bg-slate-900/30 border-t border-slate-800/30">
         <div className="flex items-center gap-3">
-          {language === "sql" && (
+          {language === "sql" && lessonSqlSamples && lessonSqlSamples.length > 0 ? (
+            <div className="flex items-center gap-2">
+              <span className="text-[9px] text-slate-600 font-medium">Exercises:</span>
+              <div className="flex items-center gap-1">
+                {lessonSqlSamples.map((_, i) => (
+                  <div
+                    key={i}
+                    className={`w-2 h-2 rounded-full transition-colors ${
+                      completedExercises.has(i) ? "bg-emerald-400" : "bg-slate-700"
+                    }`}
+                    title={`Exercise ${i + 1}: ${completedExercises.has(i) ? "Completed" : "Pending"}`}
+                  />
+                ))}
+              </div>
+              <span className="text-[9px] text-slate-600 font-medium">
+                {completedExercises.size}/{lessonSqlSamples.length}
+              </span>
+            </div>
+          ) : language === "sql" ? (
             <span className="text-[9px] text-slate-600 font-medium">
               Tables: employees, departments, products, orders
             </span>
-          )}
+          ) : null}
         </div>
         <Badge variant="outline" className="text-[9px] px-1.5 py-0 border-slate-700/40 text-slate-600 bg-transparent">
           {language === "sql" ? "SQLite (WASM)" : "Python 3"}

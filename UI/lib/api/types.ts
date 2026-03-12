@@ -143,6 +143,14 @@ export interface QuizOut {
   questions: QuizQuestionOut[];
 }
 
+export interface QuizResultOut {
+  score: string;
+  percentage: string;
+  passed: boolean;
+  total_questions: number;
+  correct_answers: number;
+}
+
 export interface FlashcardOut {
   flashcard_id: number;
   front_content: string;

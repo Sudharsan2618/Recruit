@@ -1,10 +1,28 @@
 """Application configuration using Pydantic Settings."""
 
+import secrets
+import logging
+
 from pydantic_settings import BaseSettings
 from typing import Optional
 from dotenv import load_dotenv
 import os
 load_dotenv()
+
+_config_logger = logging.getLogger(__name__)
+
+
+def _get_secret_key() -> str:
+    """Return SECRET_KEY from env, or generate a secure random one with a warning."""
+    key = os.getenv("SECRET_KEY", "")
+    if not key or key in ("dev-secret-key-change-in-production", "your-super-secret-key-change-this"):
+        generated = secrets.token_urlsafe(64)
+        _config_logger.warning(
+            "[SECURITY] Using auto-generated SECRET_KEY — set SECRET_KEY env var for production! "
+            "Tokens will be invalidated on restart."
+        )
+        return generated
+    return key
 
 
 class Settings(BaseSettings):
@@ -14,9 +32,10 @@ class Settings(BaseSettings):
     API_V1_PREFIX: str = "/api/v1"
 
     # ── Security ──
-    SECRET_KEY: str = "dev-secret-key-change-in-production"
+    SECRET_KEY: str = _get_secret_key()
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
-    REFRESH_TOKEN_EXPIRE_DAYS: int = 7
+    REFRESH_TOKEN_EXPIRE_HOURS_USER: int = 24    # Student/Company refresh token: 1 day
+    REFRESH_TOKEN_EXPIRE_HOURS_ADMIN: int = 3    # Admin refresh token: 3 hours
     ALGORITHM: str = "HS256"
 
     # ── PostgreSQL ──

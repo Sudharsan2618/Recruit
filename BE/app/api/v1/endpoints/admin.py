@@ -1,5 +1,6 @@
 """Admin portal endpoints — dashboard, user management, course management, job matching hub."""
 
+from app.utils.time import utc_now
 from typing import Optional, List
 from datetime import datetime
 
@@ -8,26 +9,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
 
 from app.db.postgres import get_db
-from app.services.auth_service import decode_access_token
 from app.services.matching_service import MatchingService
-from app.api.v1.endpoints.notifications import create_notification
+from app.services.notification_service import create_notification
+from app.api.dependencies import require_admin
 
 router = APIRouter(prefix="/admin", tags=["Admin"])
 
-
-# ── Auth helper ──────────────────────────────────────────────────────────
-
-async def _require_admin(authorization: Optional[str] = Header(None)) -> dict:
-    """Verify JWT token belongs to an admin user."""
-    if not authorization or not authorization.startswith("Bearer "):
-        raise HTTPException(status_code=401, detail="Missing or invalid token")
-    token = authorization.split(" ", 1)[1]
-    payload = decode_access_token(token)
-    if not payload:
-        raise HTTPException(status_code=401, detail="Invalid or expired token")
-    if payload.get("user_type") != "admin":
-        raise HTTPException(status_code=403, detail="Admin access required")
-    return {"user_id": int(payload.get("sub", 0)), "user_type": "admin"}
 
 
 # ══════════════════════════════════════════════════════════════════════════
@@ -36,7 +23,7 @@ async def _require_admin(authorization: Optional[str] = Header(None)) -> dict:
 
 @router.get("/dashboard")
 async def get_admin_dashboard(
-    admin: dict = Depends(_require_admin),
+    admin: dict = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
     """Get aggregated admin dashboard metrics."""
@@ -59,7 +46,7 @@ async def get_admin_dashboard(
 
 @router.get("/dashboard/charts")
 async def get_admin_dashboard_charts(
-    admin: dict = Depends(_require_admin),
+    admin: dict = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
     """Get chart data for dashboard analytics."""
@@ -167,7 +154,7 @@ async def list_users(
     sort_order: str = Query("desc", description="asc or desc"),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
-    admin: dict = Depends(_require_admin),
+    admin: dict = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
     """List all users (students + companies) with filters and search."""
@@ -269,7 +256,7 @@ async def list_users(
 async def update_user_status(
     user_id: int,
     new_status: str = Query(..., description="active, inactive, or suspended"),
-    admin: dict = Depends(_require_admin),
+    admin: dict = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
     """Activate, deactivate, or suspend a user."""
@@ -282,7 +269,7 @@ async def update_user_status(
 
     result = await db.execute(
         text("UPDATE users SET status = :status, updated_at = :now WHERE user_id = :uid RETURNING user_id"),
-        {"status": new_status, "now": datetime.utcnow(), "uid": user_id},
+        {"status": new_status, "now": utc_now(), "uid": user_id},
     )
     if not result.scalar():
         raise HTTPException(status_code=404, detail="User not found")
@@ -293,7 +280,7 @@ async def update_user_status(
 @router.delete("/users/{user_id}")
 async def delete_user(
     user_id: int,
-    admin: dict = Depends(_require_admin),
+    admin: dict = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
     """Permanently delete a user and all related data."""
@@ -322,7 +309,7 @@ async def list_admin_courses(
     sort_order: str = Query("desc"),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
-    admin: dict = Depends(_require_admin),
+    admin: dict = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
     """List all courses for admin management."""
@@ -402,13 +389,13 @@ async def list_admin_courses(
 async def toggle_course_publish(
     course_id: int,
     publish: bool = Query(...),
-    admin: dict = Depends(_require_admin),
+    admin: dict = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
     """Publish or unpublish a course."""
     result = await db.execute(
         text("UPDATE courses SET is_published = :pub, updated_at = :now WHERE course_id = :cid RETURNING course_id"),
-        {"pub": publish, "now": datetime.utcnow(), "cid": course_id},
+        {"pub": publish, "now": utc_now(), "cid": course_id},
     )
     if not result.scalar():
         raise HTTPException(status_code=404, detail="Course not found")
@@ -419,7 +406,7 @@ async def toggle_course_publish(
 @router.delete("/courses/{course_id}")
 async def delete_course(
     course_id: int,
-    admin: dict = Depends(_require_admin),
+    admin: dict = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
     """Delete a course."""
@@ -445,7 +432,7 @@ async def list_admin_jobs(
     sort_order: str = Query("desc"),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
-    admin: dict = Depends(_require_admin),
+    admin: dict = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
     """List all jobs for admin with application counts."""
@@ -545,7 +532,7 @@ async def get_job_applicants(
     sort_order: str = Query("desc"),
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
-    admin: dict = Depends(_require_admin),
+    admin: dict = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
     """Get all applicants for a specific job with composite match scores and skill breakdowns."""
@@ -717,11 +704,11 @@ async def get_job_applicants(
 @router.post("/applications/bulk-approve")
 async def bulk_approve_applications(
     application_ids: List[int] = Query(..., description="List of application IDs to approve"),
-    admin: dict = Depends(_require_admin),
+    admin: dict = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
     """Bulk approve and forward applications to companies."""
-    now = datetime.utcnow()
+    now = utc_now()
 
     # Get the admin_id from admins table
     admin_row = await db.execute(
@@ -773,7 +760,7 @@ async def bulk_approve_applications(
             stu = stu_q.mappings().first()
             if stu:
                 await create_notification(
-                    db, stu["user_id"], "application_update",
+                    stu["user_id"], "application_update",
                     "Profile Forwarded!",
                     f"Your application for {stu['job_title']} has been forwarded to {stu['company_name']}.",
                     action_url="/student/jobs?tab=applications",
@@ -791,7 +778,7 @@ async def update_application_status(
     application_id: int,
     new_status: str = Query(..., description="New application status"),
     notes: str = Query("", description="Admin notes"),
-    admin: dict = Depends(_require_admin),
+    admin: dict = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
     """Update a single application's status with optional notes."""
@@ -802,7 +789,7 @@ async def update_application_status(
     if new_status not in valid_statuses:
         raise HTTPException(status_code=400, detail=f"Invalid status. Use one of: {valid_statuses}")
 
-    now = datetime.utcnow()
+    now = utc_now()
     admin_row = await db.execute(text("SELECT admin_id FROM admins WHERE user_id = :uid"), {"uid": admin["user_id"]})
     admin_id = admin_row.scalar()
 
@@ -868,7 +855,7 @@ async def update_application_status(
         if stu:
             title_tpl, msg_tpl = status_labels[new_status]
             await create_notification(
-                db, stu["user_id"], "application_update",
+                stu["user_id"], "application_update",
                 title_tpl,
                 msg_tpl.format(job=stu["job_title"], company=stu["company_name"]),
                 email=stu["email"],

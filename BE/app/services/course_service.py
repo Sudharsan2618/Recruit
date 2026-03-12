@@ -1,5 +1,6 @@
-"""Course service — business logic layer."""
+"""Course service â€” business logic layer."""
 
+from app.utils.time import utc_now
 from datetime import datetime
 from decimal import Decimal
 from typing import List, Optional
@@ -24,7 +25,7 @@ class CourseService:
     def __init__(self, db: AsyncSession):
         self.repo = CourseRepository(db)
 
-    # ── List Courses ──
+    # â”€â”€ List Courses â”€â”€
 
     async def list_courses(
         self,
@@ -75,7 +76,7 @@ class CourseService:
             courses=items, total=total, page=page, page_size=page_size
         )
 
-    # ── Course Detail ──
+    # â”€â”€ Course Detail â”€â”€
 
     async def get_course_detail(self, slug: str) -> Optional[CourseDetail]:
         c = await self.repo.get_course_by_slug(slug)
@@ -135,7 +136,7 @@ class CourseService:
             modules=modules,
         )
 
-    # ── Lesson Content ──
+    # â”€â”€ Lesson Content â”€â”€
 
     async def get_lesson(
         self, lesson_id: int, student_id: Optional[int] = None
@@ -160,7 +161,7 @@ class CourseService:
             quiz_id=lesson.quizzes[0].quiz_id if lesson.quizzes else None,
         )
 
-    # ── Quiz ──
+    # â”€â”€ Quiz â”€â”€
 
     async def get_quiz(self, quiz_id: int) -> Optional[QuizOut]:
         quiz = await self.repo.get_quiz(quiz_id)
@@ -230,7 +231,7 @@ class CourseService:
 
         percentage = round((correct / total_points) * 100, 2) if total_points > 0 else 0
         passed = percentage >= float(quiz.pass_percentage)
-        now = datetime.utcnow()
+        now = utc_now()
 
         attempt = QuizAttempt(
             enrollment_id=enrollment_id,
@@ -253,7 +254,7 @@ class CourseService:
             correct_answers=correct,
         )
 
-    # ── Enrollment ──
+    # â”€â”€ Enrollment â”€â”€
 
     async def enroll_student(self, student_id: int, course_id: int) -> EnrollmentOut:
         existing = await self.repo.get_enrollment(student_id, course_id)
@@ -282,7 +283,7 @@ class CourseService:
                     user_id=user_id,
                     email=email,
                     notification_type="course_enrollment",
-                    title="🎉 Enrolled Successfully!",
+                    title="ðŸŽ‰ Enrolled Successfully!",
                     body=f"You have successfully enrolled in {course_title}. Start learning now!",
                     metadata={"course_id": course_id}
                 )
@@ -341,7 +342,7 @@ class CourseService:
             ))
         return results
 
-    # ── Progress ──
+    # â”€â”€ Progress â”€â”€
 
     async def update_progress(
         self, student_id: int, course_id: int, update: ProgressUpdate
@@ -373,13 +374,13 @@ class CourseService:
         progress_list = await self.repo.get_all_progress(enrollment.enrollment_id)
         return [LessonProgressOut.model_validate(p) for p in progress_list]
 
-    # ── Materials ──
+    # â”€â”€ Materials â”€â”€
 
     async def get_materials(self, course_id: int) -> List[MaterialOut]:
         materials = await self.repo.get_course_materials(course_id)
         return [MaterialOut.model_validate(m) for m in materials]
 
-    # ── Flashcard Decks ──
+    # â”€â”€ Flashcard Decks â”€â”€
 
     async def get_flashcard_deck(self, deck_id: int) -> Optional[FlashcardDeckOut]:
         deck = await self.repo.get_flashcard_deck(deck_id)
@@ -393,8 +394,28 @@ class CourseService:
             flashcards=[FlashcardOut.model_validate(f) for f in deck.flashcards],
         )
 
-    # ── Categories ──
+    # â”€â”€ Categories â”€â”€
 
     async def get_categories(self) -> List[CategoryOut]:
         categories = await self.repo.get_categories()
         return [CategoryOut.model_validate(c) for c in categories]
+
+    async def get_all_materials(self, student_id: int) -> List[dict]:
+        rows = await self.repo.get_all_student_materials(student_id)
+        results = []
+        for material, course_title in rows:
+            m_dict = MaterialOut.model_validate(material).model_dump()
+            m_dict["courseName"] = course_title
+            results.append(m_dict)
+        return results
+
+
+    async def get_all_materials_by_user(self, user_id: int) -> List[dict]:
+        rows = await self.repo.get_all_user_materials(user_id)
+        results = []
+        for material, course_title in rows:
+            m_dict = MaterialOut.model_validate(material).model_dump()
+            m_dict["courseName"] = course_title
+            results.append(m_dict)
+        return results
+

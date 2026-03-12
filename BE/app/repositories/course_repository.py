@@ -1,5 +1,6 @@
 """Course repository — all database queries for course content."""
 
+from app.utils.time import utc_now
 from typing import List, Optional
 from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -188,8 +189,8 @@ class CourseRepository:
             existing.video_position_seconds = video_position_seconds
             if is_completed:
                 existing.is_completed = True
-                existing.completed_at = datetime.utcnow()
-            existing.last_accessed_at = datetime.utcnow()
+                existing.completed_at = utc_now()
+            existing.last_accessed_at = utc_now()
             await self.db.flush()
             return existing
         else:
@@ -201,8 +202,8 @@ class CourseRepository:
                 time_spent_seconds=time_spent_seconds,
                 video_position_seconds=video_position_seconds,
                 is_completed=is_completed,
-                started_at=datetime.utcnow(),
-                completed_at=datetime.utcnow() if is_completed else None,
+                started_at=utc_now(),
+                completed_at=utc_now() if is_completed else None,
             )
             self.db.add(progress)
             await self.db.flush()
@@ -240,7 +241,7 @@ class CourseRepository:
         if enrollment.progress_percentage >= 100:
             enrollment.status = "completed"
             from datetime import datetime
-            enrollment.completed_at = datetime.utcnow()
+            enrollment.completed_at = utc_now()
         await self.db.flush()
 
     # ── Materials ──
@@ -270,3 +271,29 @@ class CourseRepository:
         query = select(Category).where(Category.is_active == True).order_by(Category.display_order)
         result = await self.db.execute(query)
         return list(result.scalars().all())
+
+    async def get_all_student_materials(self, student_id: int):
+        query = (
+            select(Material, Course.title.label("course_title"))
+            .select_from(Enrollment)
+            .join(Course, Course.course_id == Enrollment.course_id)
+            .join(Material, Material.course_id == Course.course_id)
+            .where(Enrollment.student_id == student_id)
+        )
+        result = await self.db.execute(query)
+        rows = result.all()
+        return rows
+
+    async def get_all_user_materials(self, user_id: int):
+        from app.models.user import Student
+        query = (
+            select(Material, Course.title.label("course_title"))
+            .select_from(Student)
+            .join(Enrollment, Enrollment.student_id == Student.student_id)
+            .join(Course, Course.course_id == Enrollment.course_id)
+            .join(Material, Material.course_id == Course.course_id)
+            .where(Student.user_id == user_id)
+        )
+        result = await self.db.execute(query)
+        rows = result.all()
+        return rows

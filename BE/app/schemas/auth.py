@@ -13,6 +13,7 @@ class LoginRequest(BaseModel):
 
 class TokenResponse(BaseModel):
     access_token: str
+    refresh_token: str
     token_type: str = "bearer"
     user: "UserOut"
 
@@ -34,6 +35,10 @@ class UserOut(BaseModel):
     logo_url: Optional[str] = None
 
 
+class RefreshRequest(BaseModel):
+    refresh_token: str
+
+
 # ── Registration ──
 
 class StudentRegisterRequest(BaseModel):
@@ -52,27 +57,26 @@ class CompanyRegisterRequest(BaseModel):
 # ── Student Onboarding ──
 
 class StudentOnboardingRequest(BaseModel):
-    # Step 1: Basic Info (all optional since some collected at registration)
-    phone: Optional[str] = None
+    phone: Optional[str] = Field(None, max_length=20, pattern=r'^\+?[0-9\s\-]+$')
     headline: Optional[str] = None
     bio: Optional[str] = None
     location: Optional[str] = None
     education: Optional[str] = None
-    experience_years: Optional[int] = None
+    experience_years: Optional[int] = Field(None, ge=0, le=50)
     # Step 2: Job Preferences
     availability_status: Optional[bool] = True
     preferred_job_types: Optional[List[str]] = None
     preferred_locations: Optional[List[str]] = None
     preferred_remote_types: Optional[List[str]] = None
-    salary_expectation_min: Optional[Decimal] = None
-    salary_expectation_max: Optional[Decimal] = None
+    salary_expectation_min: Optional[Decimal] = Field(None, ge=0)
+    salary_expectation_max: Optional[Decimal] = Field(None, ge=0)
     salary_currency: Optional[str] = "INR"
-    notice_period_days: Optional[int] = None
+    notice_period_days: Optional[int] = Field(None, ge=0, le=365)
     # Step 3: Social Links
-    linkedin_url: Optional[str] = None
-    github_url: Optional[str] = None
-    portfolio_url: Optional[str] = None
-    personal_website: Optional[str] = None
+    linkedin_url: Optional[str] = Field(None, max_length=500)
+    github_url: Optional[str] = Field(None, max_length=500)
+    portfolio_url: Optional[str] = Field(None, max_length=500)
+    personal_website: Optional[str] = Field(None, max_length=500)
 
 
 class StudentProfileOut(BaseModel):
@@ -143,24 +147,24 @@ class StudentProfileFullOut(BaseModel):
 class StudentProfileUpdateRequest(BaseModel):
     first_name: Optional[str] = None
     last_name: Optional[str] = None
-    phone: Optional[str] = None
+    phone: Optional[str] = Field(None, max_length=20, pattern=r'^\+?[0-9\s\-]+$')
     headline: Optional[str] = None
     bio: Optional[str] = None
     location: Optional[str] = None
     education: Optional[str] = None
-    experience_years: Optional[int] = None
+    experience_years: Optional[int] = Field(None, ge=0, le=50)
     availability_status: Optional[bool] = None
     preferred_job_types: Optional[List[str]] = None
     preferred_locations: Optional[List[str]] = None
     preferred_remote_types: Optional[List[str]] = None
-    salary_expectation_min: Optional[Decimal] = None
-    salary_expectation_max: Optional[Decimal] = None
+    salary_expectation_min: Optional[Decimal] = Field(None, ge=0)
+    salary_expectation_max: Optional[Decimal] = Field(None, ge=0)
     salary_currency: Optional[str] = None
-    notice_period_days: Optional[int] = None
-    linkedin_url: Optional[str] = None
-    github_url: Optional[str] = None
-    portfolio_url: Optional[str] = None
-    personal_website: Optional[str] = None
+    notice_period_days: Optional[int] = Field(None, ge=0, le=365)
+    linkedin_url: Optional[str] = Field(None, max_length=500)
+    github_url: Optional[str] = Field(None, max_length=500)
+    portfolio_url: Optional[str] = Field(None, max_length=500)
+    personal_website: Optional[str] = Field(None, max_length=500)
 
 
 # ── Company Onboarding ──
@@ -170,17 +174,17 @@ class CompanyOnboardingRequest(BaseModel):
     description: Optional[str] = None
     industry: Optional[str] = None
     company_size: Optional[str] = None
-    founded_year: Optional[int] = None
+    founded_year: Optional[int] = Field(None, ge=1800, le=2030)
     headquarters_location: Optional[str] = None
     # Step 2: Contact
-    website_url: Optional[str] = None
-    contact_email: Optional[str] = None
-    contact_phone: Optional[str] = None
+    website_url: Optional[str] = Field(None, max_length=500)
+    contact_email: Optional[EmailStr] = None
+    contact_phone: Optional[str] = Field(None, max_length=20, pattern=r'^\+?[0-9\s\-]+$')
     # Step 3: Social & Billing
-    linkedin_url: Optional[str] = None
-    twitter_url: Optional[str] = None
-    billing_email: Optional[str] = None
-    gst_number: Optional[str] = None
+    linkedin_url: Optional[str] = Field(None, max_length=500)
+    twitter_url: Optional[str] = Field(None, max_length=500)
+    billing_email: Optional[EmailStr] = None
+    gst_number: Optional[str] = Field(None, max_length=20)
     billing_address: Optional[str] = None
 
 
@@ -235,19 +239,19 @@ class CompanyProfileFullOut(BaseModel):
 
 class CompanyProfileUpdateRequest(BaseModel):
     company_name: Optional[str] = None
-    phone: Optional[str] = None
+    phone: Optional[str] = Field(None, max_length=20, pattern=r'^\+?[0-9\s\-]+$')
     description: Optional[str] = None
     industry: Optional[str] = None
     company_size: Optional[str] = None
-    founded_year: Optional[int] = None
+    founded_year: Optional[int] = Field(None, ge=1800, le=2030)
     headquarters_location: Optional[str] = None
-    website_url: Optional[str] = None
-    contact_email: Optional[str] = None
-    contact_phone: Optional[str] = None
-    linkedin_url: Optional[str] = None
-    twitter_url: Optional[str] = None
-    billing_email: Optional[str] = None
-    gst_number: Optional[str] = None
+    website_url: Optional[str] = Field(None, max_length=500)
+    contact_email: Optional[EmailStr] = None
+    contact_phone: Optional[str] = Field(None, max_length=20, pattern=r'^\+?[0-9\s\-]+$')
+    linkedin_url: Optional[str] = Field(None, max_length=500)
+    twitter_url: Optional[str] = Field(None, max_length=500)
+    billing_email: Optional[EmailStr] = None
+    gst_number: Optional[str] = Field(None, max_length=20)
     billing_address: Optional[str] = None
 
 

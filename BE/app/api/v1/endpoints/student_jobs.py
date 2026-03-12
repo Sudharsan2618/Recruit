@@ -1,5 +1,6 @@
 """Student-facing job endpoints: browse jobs, recommendations, apply."""
 
+from app.utils.time import utc_now
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Header, Query
@@ -9,8 +10,8 @@ from datetime import datetime
 
 from app.db.postgres import get_db
 from app.services.matching_service import MatchingService, COMPOSITE_THRESHOLD
-from app.services.auth_service import decode_access_token
-from app.api.v1.endpoints.notifications import create_notification
+from app.services.notification_service import create_notification
+from app.api.dependencies import require_student
 from app.schemas.student_jobs import (
     JobListItem, JobListResponse, RecommendedJobsResponse,
     JobDetail, CompanyBrief, CompanyDetail, SkillBrief,
@@ -20,30 +21,6 @@ from app.schemas.student_jobs import (
 
 router = APIRouter(prefix="/student-jobs", tags=["Student Jobs"])
 
-
-# ── Auth helper ──────────────────────────────────────────────────────────
-
-async def _get_current_user(authorization: Optional[str] = Header(None)) -> dict:
-    """Extract user from Bearer token. Returns dict with user_id, user_type."""
-    if not authorization or not authorization.startswith("Bearer "):
-        raise HTTPException(status_code=401, detail="Missing or invalid token")
-    token = authorization.split(" ", 1)[1]
-    payload = decode_access_token(token)
-    if not payload:
-        raise HTTPException(status_code=401, detail="Invalid or expired token")
-    return {"user_id": int(payload.get("sub", 0)), "user_type": payload.get("user_type", "")}
-
-
-async def _get_student_id(db: AsyncSession, user_id: int) -> int:
-    """Resolve student_id from user_id."""
-    result = await db.execute(
-        text("SELECT student_id FROM students WHERE user_id = :uid"),
-        {"uid": user_id},
-    )
-    row = result.scalar_one_or_none()
-    if not row:
-        raise HTTPException(status_code=404, detail="Student profile not found")
-    return row
 
 
 def _build_job_list_item(job: dict) -> JobListItem:
@@ -98,14 +75,14 @@ def _build_job_list_item(job: dict) -> JobListItem:
 async def get_recommended_jobs(
     limit: int = Query(50, ge=1, le=200),
     offset: int = Query(0, ge=0),
-    user: dict = Depends(_get_current_user),
+    user: dict = Depends(require_student),
     db: AsyncSession = Depends(get_db),
 ):
     """
     Get AI-recommended jobs using hybrid matching.
     Returns ALL jobs whose composite score >= 65% (vector 35% + skills 35% + experience 20% + preferences 10%).
     """
-    student_id = await _get_student_id(db, user["user_id"])
+    student_id = user["student_id"]
     svc = MatchingService(db)
     jobs = await svc.get_recommended_jobs_for_student(student_id, limit=limit, offset=offset)
     items = [_build_job_list_item(j) for j in jobs]
@@ -126,11 +103,11 @@ async def get_all_jobs(
     location: str = Query(""),
     limit: int = Query(50, ge=1, le=100),
     offset: int = Query(0, ge=0),
-    user: dict = Depends(_get_current_user),
+    user: dict = Depends(require_student),
     db: AsyncSession = Depends(get_db),
 ):
     """Browse all active jobs with optional filters. Includes composite match score if student has embedding."""
-    student_id = await _get_student_id(db, user["user_id"])
+    student_id = user["student_id"]
     svc = MatchingService(db)
     jobs = await svc.get_all_active_jobs(
         student_id=student_id,
@@ -150,11 +127,11 @@ async def get_all_jobs(
 
 @router.get("/applications/me", response_model=MyApplicationsResponse)
 async def get_my_applications(
-    user: dict = Depends(_get_current_user),
+    user: dict = Depends(require_student),
     db: AsyncSession = Depends(get_db),
 ):
     """Get all applications for the authenticated student."""
-    student_id = await _get_student_id(db, user["user_id"])
+    student_id = user["student_id"]
 
     result = await db.execute(
         text("""
@@ -199,11 +176,11 @@ async def get_my_applications(
 @router.get("/{job_id}", response_model=JobDetail)
 async def get_job_detail(
     job_id: int,
-    user: dict = Depends(_get_current_user),
+    user: dict = Depends(require_student),
     db: AsyncSession = Depends(get_db),
 ):
     """Get full job detail with composite match breakdown, skill gaps, and course recommendations."""
-    student_id = await _get_student_id(db, user["user_id"])
+    student_id = user["student_id"]
     svc = MatchingService(db)
     job = await svc.get_job_detail(job_id, student_id=student_id)
     if not job:
@@ -271,11 +248,11 @@ async def get_job_detail(
 async def apply_to_job(
     job_id: int,
     body: ApplyRequest,
-    user: dict = Depends(_get_current_user),
+    user: dict = Depends(require_student),
     db: AsyncSession = Depends(get_db),
 ):
     """Apply to a job. Application goes to admin for review first."""
-    student_id = await _get_student_id(db, user["user_id"])
+    student_id = user["student_id"]
 
     # Check job exists and is active
     job_result = await db.execute(
@@ -302,7 +279,7 @@ async def apply_to_job(
     admin_match_score = round(composite_score * 100, 2) if composite_score is not None else None
 
     # Insert application
-    now = datetime.utcnow()
+    now = utc_now()
     result = await db.execute(
         text("""
             INSERT INTO applications (student_id, job_id, status, cover_letter, expected_salary,
@@ -330,7 +307,7 @@ async def apply_to_job(
 
     # Notify the student (confirmation)
     await create_notification(
-        db, user["user_id"], "application_update",
+        user["user_id"], "application_update",
         "Application Submitted",
         f"Your application for {job_row['title']} has been submitted and is under review.",
         action_url="/student/jobs?tab=applications",
@@ -344,7 +321,7 @@ async def apply_to_job(
     )
     for admin_row in admin_users.mappings().all():
         await create_notification(
-            db, admin_row["user_id"], "application_update",
+            admin_row["user_id"], "application_update",
             "New Application",
             f"A student applied for {job_row['title']}. Review and take action.",
             action_url="/admin/matching",

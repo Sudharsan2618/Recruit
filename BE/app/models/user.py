@@ -3,6 +3,7 @@ SQLAlchemy models for user-related tables.
 Maps to DB/001_postgresql_schema.sql SECTION 2.
 """
 
+from app.utils.time import utc_now
 from datetime import datetime
 from decimal import Decimal
 from typing import Optional
@@ -35,8 +36,8 @@ class User(Base):
     phone: Mapped[Optional[str]] = mapped_column(String(20))
     phone_verified: Mapped[bool] = mapped_column(Boolean, default=False)
     onboarding_completed: Mapped[bool] = mapped_column(Boolean, default=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now, onupdate=utc_now)
     last_login_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
 
     # Relationships
@@ -86,8 +87,8 @@ class Student(Base):
     total_learning_hours: Mapped[Decimal] = mapped_column(Numeric(10, 2), default=0)
     average_quiz_score: Mapped[Decimal] = mapped_column(Numeric(5, 2), default=0)
     streak_days: Mapped[int] = mapped_column(Integer, default=0)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now, onupdate=utc_now)
 
     # Relationships
     user: Mapped["User"] = relationship(back_populates="student")
@@ -120,8 +121,8 @@ class Company(Base):
     billing_address: Mapped[Optional[str]] = mapped_column(Text)
     total_jobs_posted: Mapped[int] = mapped_column(Integer, default=0)
     total_hires: Mapped[int] = mapped_column(Integer, default=0)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now, onupdate=utc_now)
 
     # Relationships
     user: Mapped["User"] = relationship(back_populates="company")

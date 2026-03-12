@@ -1,5 +1,6 @@
 """Course Review API endpoints — create, list, stats."""
 
+from app.utils.time import utc_now
 from typing import Optional
 from datetime import datetime
 
@@ -8,21 +9,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
 
 from app.db.postgres import get_db
-from app.services.auth_service import decode_access_token
+from app.api.dependencies import get_current_user
 
 router = APIRouter(prefix="/courses", tags=["Course Reviews"])
 
-
-# ── Auth helpers ─────────────────────────────────────────────────────────
-
-async def _get_current_user(authorization: Optional[str] = Header(None)) -> dict:
-    if not authorization or not authorization.startswith("Bearer "):
-        raise HTTPException(status_code=401, detail="Not authenticated")
-    token = authorization.split(" ")[1]
-    payload = decode_access_token(token)
-    if not payload:
-        raise HTTPException(status_code=401, detail="Invalid or expired token")
-    return {"user_id": int(payload.get("sub", 0)), "user_type": payload.get("user_type", "")}
 
 
 async def _get_student_id(db: AsyncSession, user_id: int) -> int:
@@ -122,7 +112,7 @@ async def list_reviews(
 @router.get("/{course_id}/reviews/me")
 async def get_my_review(
     course_id: int,
-    user: dict = Depends(_get_current_user),
+    user: dict = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """Check if the current student has already reviewed this course."""
@@ -150,7 +140,7 @@ async def create_review(
     course_id: int,
     rating: int = Query(..., ge=1, le=5),
     review_text: str = Query(""),
-    user: dict = Depends(_get_current_user),
+    user: dict = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """Submit a review for a course. Student must be enrolled."""
@@ -173,7 +163,7 @@ async def create_review(
     if existing.scalar():
         raise HTTPException(status_code=409, detail="You have already reviewed this course")
 
-    now = datetime.utcnow()
+    now = utc_now()
     result = await db.execute(
         text("""
             INSERT INTO course_reviews (course_id, student_id, enrollment_id, rating, review_text, created_at, updated_at)
@@ -210,7 +200,7 @@ async def update_review(
     course_id: int,
     rating: int = Query(..., ge=1, le=5),
     review_text: str = Query(""),
-    user: dict = Depends(_get_current_user),
+    user: dict = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """Update an existing review."""
@@ -228,7 +218,7 @@ async def update_review(
             "sid": student_id,
             "rating": rating,
             "text": review_text if review_text.strip() else None,
-            "now": datetime.utcnow(),
+            "now": utc_now(),
         },
     )
     review_id = result.scalar()
@@ -244,7 +234,7 @@ async def update_review(
 @router.delete("/{course_id}/reviews")
 async def delete_review(
     course_id: int,
-    user: dict = Depends(_get_current_user),
+    user: dict = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """Delete your own review."""

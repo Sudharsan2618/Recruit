@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.postgres import get_db
 from app.services.course_service import CourseService
+from app.api.dependencies import get_current_user_id
 from app.schemas.course import (
     CourseListResponse, CourseDetail,
     LessonOut, EnrollRequest, EnrollmentOut,
@@ -144,6 +145,15 @@ async def enroll_in_course(
 
     return enrollment
 
+
+
+@student_router.get("/materials/all", response_model=list[dict])
+async def get_all_materials_for_user(
+    user_id: int = Depends(get_current_user_id),
+    service: CourseService = Depends(get_service),
+):
+    """Get all downloadable materials across all enrolled courses."""
+    return await service.get_all_materials_by_user(user_id)
 
 @student_router.get("/enrollments", response_model=list[EnrollmentOut])
 async def get_enrollments(

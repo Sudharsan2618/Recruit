@@ -8,6 +8,10 @@ from app.config import settings
 from app.api.v1.router import router as v1_router
 from app.db.mongodb import connect_mongodb, close_mongodb, ensure_indexes
 
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
+from app.utils.limiter import limiter
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -45,18 +49,20 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
 # CORS — allow frontend
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         settings.FRONTEND_URL,
         "http://localhost:3000",
-        "http://localhost:3001",
-        "https://recruit-smoky.vercel.app",
-    ],
+        "http://127.0.0.1:3000",
+    ] if settings.DEBUG else [settings.FRONTEND_URL],
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type", "Accept"],
 )
 
 # Mount API routes

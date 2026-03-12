@@ -1,5 +1,6 @@
 """Service for job creation, management, and embedding generation."""
 
+from app.utils.time import utc_now
 import re
 import logging
 from datetime import datetime
@@ -76,7 +77,7 @@ class JobService:
         slug = _slugify(data["title"])
 
         # Determine posted_at based on status
-        now = datetime.utcnow()
+        now = utc_now()
         posted_at = now if data.get("status") == "active" else None
 
         # Create job
@@ -201,7 +202,7 @@ class JobService:
     ) -> str:
         """Generate and store a vector embedding for the job posting."""
         try:
-            # Build rich text for embedding — include all relevant content
+            # Build rich text for embedding â€” include all relevant content
             parts = []
             if title:
                 parts.append(f"Job Title: {title}")
@@ -237,7 +238,7 @@ class JobService:
             # Generate embedding via Gemini
             vector = generate_embedding(embed_text)
 
-            now = datetime.utcnow()
+            now = utc_now()
             if existing_row:
                 existing_row.embedding = vector
                 existing_row.source_text_hash = current_hash
@@ -357,7 +358,7 @@ class JobService:
                     user_id=m["user_id"],
                     email=m["email"],
                     notification_type="job_match",
-                    title="🎯 New Job Match!",
+                    title="ðŸŽ¯ New Job Match!",
                     message=f"Hi {m['first_name'] or 'there'}, we found a new job at {company_name} that matches your skills: {title}",
                     action_url=f"/student/jobs/{job_id}",
                     action_text="View Match",

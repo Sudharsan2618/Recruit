@@ -1,10 +1,11 @@
 """
-Razorpay Payment Service — handles order creation, signature verification,
+Razorpay Payment Service â€” handles order creation, signature verification,
 payment recording, and enrollment linking.
 
 Uses Razorpay Python SDK in TEST MODE.
 """
 
+from app.utils.time import utc_now
 import hmac
 import hashlib
 import logging
@@ -23,7 +24,7 @@ from app.models.user import Student
 
 logger = logging.getLogger(__name__)
 
-# ── Razorpay client (test mode) ──
+# â”€â”€ Razorpay client (test mode) â”€â”€
 RAZORPAY_KEY_ID = os.getenv("RAZORPAY_KEY_ID", "")
 RAZORPAY_KEY_SECRET = os.getenv("RAZORPAY_KEY_SECRET", "")
 
@@ -34,9 +35,9 @@ class PaymentService:
     def __init__(self, db: AsyncSession):
         self.db = db
 
-    # ────────────────────────────────────────────
+    # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     # 1. CREATE ORDER
-    # ────────────────────────────────────────────
+    # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     async def create_order(self, user_id: int, course_id: int) -> dict:
         """
         Create a Razorpay order + pending payment row in DB.
@@ -71,7 +72,7 @@ class PaymentService:
         # 3. Calculate pricing
         price = float(course.discount_price or course.price or 0)
         if price <= 0:
-            raise ValueError("This is a free course — enroll directly without payment")
+            raise ValueError("This is a free course â€” enroll directly without payment")
 
         tax_pct = 18.0  # GST
         tax_amount = round(price * tax_pct / 100, 2)
@@ -99,7 +100,7 @@ class PaymentService:
         # 5. Generate invoice number
         count_result = await self.db.execute(select(func.count(Payment.payment_id)))
         count = count_result.scalar() or 0
-        invoice_number = f"INV-{datetime.utcnow().strftime('%Y%m')}-{count + 1:04d}"
+        invoice_number = f"INV-{utc_now().strftime('%Y%m')}-{count + 1:04d}"
 
         # 6. Create pending payment row
         payment = Payment(
@@ -138,9 +139,9 @@ class PaymentService:
             "course_id": course_id,
         }
 
-    # ────────────────────────────────────────────
+    # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     # 2. VERIFY PAYMENT
-    # ────────────────────────────────────────────
+    # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     async def verify_payment(
         self,
         user_id: int,
@@ -172,7 +173,7 @@ class PaymentService:
                 payment.status = PaymentStatus.failed
                 payment.gateway_response = {"error": "signature_mismatch"}
                 await self.db.commit()
-            raise ValueError("Payment verification failed — signature mismatch")
+            raise ValueError("Payment verification failed â€” signature mismatch")
 
         # 2. Find the pending payment
         payment = (await self.db.execute(
@@ -198,7 +199,7 @@ class PaymentService:
         payment.gateway_payment_id = razorpay_payment_id
         payment.gateway_signature = razorpay_signature
         payment.gateway_response = rz_payment if isinstance(rz_payment, dict) else {}
-        payment.completed_at = datetime.utcnow()
+        payment.completed_at = utc_now()
         payment.billing_email = rz_payment.get("email", "")
 
         # 5. Create enrollment
@@ -264,8 +265,8 @@ class PaymentService:
             await create_notification(
                 self.db,
                 user_id=user_id,
-                title="Payment Successful! 🎉",
-                message=f"Your payment of ₹{payment.total_amount} for \"{course.title}\" was successful. You can now start learning!",
+                title="Payment Successful! ðŸŽ‰",
+                message=f"Your payment of â‚¹{payment.total_amount} for \"{course.title}\" was successful. You can now start learning!",
                 notification_type="payment_confirmation",
                 reference_type="course",
                 reference_id=course_id,
@@ -281,9 +282,9 @@ class PaymentService:
             "course_slug": course.slug if course else "",
         }
 
-    # ────────────────────────────────────────────
+    # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     # 3. PAYMENT HISTORY
-    # ────────────────────────────────────────────
+    # â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     async def get_payment_history(self, user_id: int) -> dict:
         """Get all payments for a user with course title lookups."""
         result = await self.db.execute(

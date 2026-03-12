@@ -1,183 +1,76 @@
-"""Notification API endpoints — list, mark read, unread count, create helper."""
+"""Notification API endpoints — list, mark read, unread count."""
 
-from fastapi import APIRouter, Depends, HTTPException, Header, Query
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import text
-from typing import Optional
-from datetime import datetime
+from fastapi import APIRouter, Depends, HTTPException, Query
 
-from app.db.postgres import get_db
-from app.services.auth_service import decode_access_token
-from app.services.novu_service import trigger_novu_notification
+from app.api.dependencies import get_current_user_id
+from app.services import notification_service
 
 router = APIRouter(prefix="/notifications", tags=["Notifications"])
 
-
-# ── Auth helper ──────────────────────────────────────────────────────────
-
-async def _get_current_user_id(authorization: Optional[str] = Header(None)) -> int:
-    if not authorization or not authorization.startswith("Bearer "):
-        raise HTTPException(status_code=401, detail="Not authenticated")
-    token = authorization.split(" ")[1]
-    payload = decode_access_token(token)
-    if not payload:
-        raise HTTPException(status_code=401, detail="Invalid or expired token")
-    return int(payload.get("sub", 0))
-
-
-# ── Helper: create a notification (used by other endpoints) ──────────────
-
-async def create_notification(
-    db: AsyncSession,
-    user_id: int,
-    notification_type: str,
-    title: str,
-    message: str,
-    action_url: str | None = None,
-    action_text: str | None = None,
-    reference_type: str | None = None,
-    reference_id: int | None = None,
-    workflow_id: str = "onboarding-demo-workflow",
-):
-    """Insert a notification row. Call this from any endpoint that needs to notify a user."""
-    await db.execute(
-        text("""
-            INSERT INTO notifications (user_id, type, title, message, action_url, action_text, reference_type, reference_id)
-            VALUES (:user_id, :type, :title, :message, :action_url, :action_text, :reference_type, :reference_id)
-        """),
-        {
-            "user_id": user_id,
-            "type": notification_type,
-            "title": title,
-            "message": message,
-            "action_url": action_url,
-            "action_text": action_text,
-            "reference_type": reference_type,
-            "reference_id": reference_id,
-        },
-    )
-
-    # ── Trigger Novu ──
-    payload = {
-        "title": title,
-        "message": message,
-        "type": notification_type,
-        "action_url": action_url,
-        "reference_id": reference_id
-    }
-    trigger_novu_notification(user_id, workflow_id, payload)
-
-
-# ── GET /notifications/unread-count ──────────────────────────────────────
-
 @router.get("/unread-count")
 async def get_unread_count(
-    user_id: int = Depends(_get_current_user_id),
-    db: AsyncSession = Depends(get_db),
+    user_id: int = Depends(get_current_user_id),
 ):
     """Return the count of unread notifications for the current user."""
-    result = await db.execute(
-        text("SELECT COUNT(*) FROM notifications WHERE user_id = :uid AND is_read = false"),
-        {"uid": user_id},
-    )
-    count = result.scalar() or 0
+    count = await notification_service.get_unread_count(user_id)
     return {"unread_count": count}
-
-
-# ── GET /notifications ───────────────────────────────────────────────────
 
 @router.get("")
 async def list_notifications(
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
     unread_only: bool = Query(False),
-    user_id: int = Depends(_get_current_user_id),
-    db: AsyncSession = Depends(get_db),
+    user_id: int = Depends(get_current_user_id),
 ):
     """List notifications for the current user, newest first."""
-    where = "user_id = :uid"
-    params: dict = {"uid": user_id, "limit": limit, "offset": offset}
-
-    if unread_only:
-        where += " AND is_read = false"
-
-    count_q = await db.execute(text(f"SELECT COUNT(*) FROM notifications WHERE {where}"), params)
-    total = count_q.scalar() or 0
-
-    data_q = await db.execute(
-        text(f"""
-            SELECT notification_id, type, title, message,
-                   action_url, action_text, reference_type, reference_id,
-                   is_read, read_at, created_at
-            FROM notifications
-            WHERE {where}
-            ORDER BY created_at DESC
-            LIMIT :limit OFFSET :offset
-        """),
-        params,
+    docs, total = await notification_service.get_user_notifications(
+        user_id, limit=limit, offset=offset, unread_only=unread_only
     )
-    rows = [dict(r) for r in data_q.mappings().all()]
+    
+    rows = []
+    for doc in docs:
+        rows.append({
+            "notification_id": doc.get("notification_id"),
+            "type": doc.get("notification_type"),
+            "title": doc.get("payload", {}).get("title", ""),
+            "message": doc.get("payload", {}).get("body", ""),
+            "action_url": doc.get("action_url"),
+            "action_text": doc.get("action_text"),
+            "reference_type": doc.get("reference_type"),
+            "reference_id": doc.get("reference_id"),
+            "is_read": doc.get("read", False),
+            "read_at": doc.get("updated_at") if doc.get("read") else None,
+            "created_at": doc.get("created_at"),
+        })
 
     return {"notifications": rows, "total": total}
 
-
-# ── PUT /notifications/{id}/read ─────────────────────────────────────────
-
 @router.put("/{notification_id}/read")
 async def mark_as_read(
-    notification_id: int,
-    user_id: int = Depends(_get_current_user_id),
-    db: AsyncSession = Depends(get_db),
+    notification_id: str,
+    user_id: int = Depends(get_current_user_id),
 ):
     """Mark a single notification as read."""
-    result = await db.execute(
-        text("""
-            UPDATE notifications SET is_read = true, read_at = :now
-            WHERE notification_id = :nid AND user_id = :uid
-            RETURNING notification_id
-        """),
-        {"nid": notification_id, "uid": user_id, "now": datetime.utcnow()},
-    )
-    if not result.scalar():
-        raise HTTPException(status_code=404, detail="Notification not found")
-    await db.commit()
+    success = await notification_service.mark_notification_read(notification_id)
+    if not success:
+         raise HTTPException(status_code=404, detail="Notification not found")
     return {"success": True}
-
-
-# ── PUT /notifications/read-all ──────────────────────────────────────────
 
 @router.put("/read-all")
 async def mark_all_as_read(
-    user_id: int = Depends(_get_current_user_id),
-    db: AsyncSession = Depends(get_db),
+    user_id: int = Depends(get_current_user_id),
 ):
     """Mark all unread notifications as read for the current user."""
-    now = datetime.utcnow()
-    result = await db.execute(
-        text("""
-            UPDATE notifications SET is_read = true, read_at = :now
-            WHERE user_id = :uid AND is_read = false
-        """),
-        {"uid": user_id, "now": now},
-    )
-    await db.commit()
-    return {"success": True, "updated": result.rowcount}
-
-
-# ── DELETE /notifications/{id} ───────────────────────────────────────────
+    updated_count = await notification_service.mark_all_as_read(user_id)
+    return {"success": True, "updated": updated_count}
 
 @router.delete("/{notification_id}")
 async def delete_notification(
-    notification_id: int,
-    user_id: int = Depends(_get_current_user_id),
-    db: AsyncSession = Depends(get_db),
+    notification_id: str,
+    user_id: int = Depends(get_current_user_id),
 ):
     """Delete a single notification."""
-    result = await db.execute(
-        text("DELETE FROM notifications WHERE notification_id = :nid AND user_id = :uid RETURNING notification_id"),
-        {"nid": notification_id, "uid": user_id},
-    )
-    if not result.scalar():
+    success = await notification_service.delete_notification(notification_id, user_id)
+    if not success:
         raise HTTPException(status_code=404, detail="Notification not found")
-    await db.commit()
     return {"success": True}

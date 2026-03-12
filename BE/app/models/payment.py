@@ -3,6 +3,7 @@ SQLAlchemy model for the payments table.
 Maps exactly to DB/001_postgresql_schema.sql SECTION (payments).
 """
 
+from app.utils.time import utc_now
 import enum
 from datetime import datetime
 from decimal import Decimal
@@ -86,7 +87,7 @@ class Payment(Base):
     billing_gst: Mapped[Optional[str]] = mapped_column(String(50))
 
     # Dates
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now)
     completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
     refunded_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
     refund_reason: Mapped[Optional[str]] = mapped_column(Text)

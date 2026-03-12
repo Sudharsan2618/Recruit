@@ -1,5 +1,6 @@
-"""Embedding service — generates text embeddings via Gemini REST API and stores in PostgreSQL pgvector."""
+"""Embedding service â€” generates text embeddings via Gemini REST API and stores in PostgreSQL pgvector."""
 
+from app.utils.time import utc_now
 import hashlib
 import logging
 import requests
@@ -11,14 +12,14 @@ from app.db.mongodb import get_mongodb
 
 logger = logging.getLogger(__name__)
 
-# ── Config ─────────────────────────────────────────────────────────────────
+# â”€â”€ Config â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 EMBEDDING_MODEL = "gemini-embedding-001"
 EMBEDDING_DIM = 1536
 GEMINI_EMBED_URL = f"https://generativelanguage.googleapis.com/v1beta/models/{EMBEDDING_MODEL}:embedContent"
 
 
-# ── Core embedding function ───────────────────────────────────────────────
+# â”€â”€ Core embedding function â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def generate_embedding(text: str, task_type: str = "RETRIEVAL_DOCUMENT") -> list[float]:
     """
@@ -59,7 +60,7 @@ def text_hash(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
-# ── Student embedding ─────────────────────────────────────────────────────
+# â”€â”€ Student embedding â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def build_student_text(
     *,
@@ -98,10 +99,10 @@ async def generate_student_embedding(student_id: int) -> Optional[dict]:
     Generate and store an embedding for a student.
 
     Data sources (merged, best-effort):
-      1. PostgreSQL — student profile (bio, headline, education, experience_years)
-      2. PostgreSQL — student_skills table
-      3. PostgreSQL — enrolled / completed course titles
-      4. MongoDB   — resume_analysis extracted data (skills, certifications, job_titles, summary)
+      1. PostgreSQL â€” student profile (bio, headline, education, experience_years)
+      2. PostgreSQL â€” student_skills table
+      3. PostgreSQL â€” enrolled / completed course titles
+      4. MongoDB   â€” resume_analysis extracted data (skills, certifications, job_titles, summary)
 
     Works even if only profile data exists (e.g. right after onboarding).
 
@@ -112,7 +113,7 @@ async def generate_student_embedding(student_id: int) -> Optional[dict]:
     from app.models.embedding import StudentEmbedding
     from sqlalchemy import select
 
-    # ── 1. PostgreSQL: student profile + skills + courses ────────────────
+    # â”€â”€ 1. PostgreSQL: student profile + skills + courses â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     bio = ""
     headline = ""
     education_pg = ""
@@ -172,7 +173,7 @@ async def generate_student_embedding(student_id: int) -> Optional[dict]:
         )
         enrolled_courses = [row[0] for row in enr_q.fetchall()]
 
-    # ── 2. MongoDB: resume analysis (optional enrichment) ────────────────
+    # â”€â”€ 2. MongoDB: resume analysis (optional enrichment) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     extracted: dict = {}
     try:
         db = get_mongodb()
@@ -183,9 +184,9 @@ async def generate_student_embedding(student_id: int) -> Optional[dict]:
         if analysis and "extracted_data" in analysis:
             extracted = analysis["extracted_data"]
     except Exception:
-        pass  # MongoDB unavailable — continue with PG data only
+        pass  # MongoDB unavailable â€” continue with PG data only
 
-    # ── 3. Merge data: resume analysis enriches PG data ──────────────────
+    # â”€â”€ 3. Merge data: resume analysis enriches PG data â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     all_skills = list(dict.fromkeys(
         extracted.get("skills", []) + pg_skills
     ))  # deduplicated, preserving order
@@ -205,7 +206,7 @@ async def generate_student_embedding(student_id: int) -> Optional[dict]:
 
     all_courses = completed_courses + enrolled_courses
 
-    # ── 4. Build text and check hash ─────────────────────────────────────
+    # â”€â”€ 4. Build text and check hash â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     embed_text = build_student_text(
         skills=all_skills,
         experience_years=extracted.get("experience_years", experience_years),
@@ -246,7 +247,7 @@ async def generate_student_embedding(student_id: int) -> Optional[dict]:
         )
         row = existing.scalar_one_or_none()
 
-        now = datetime.utcnow()
+        now = utc_now()
         if row:
             row.embedding = vector
             row.source_text_hash = current_hash
@@ -273,7 +274,7 @@ async def generate_student_embedding(student_id: int) -> Optional[dict]:
     }
 
 
-# ── Job embedding (for future use) ────────────────────────────────────────
+# â”€â”€ Job embedding (for future use) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 def build_job_text(
     *,

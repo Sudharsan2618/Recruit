@@ -45,3 +45,4 @@ razorpay==1.4.2
 
 # Notifications
 novu==1.14.0
+slowapi==0.1.9

@@ -3,6 +3,7 @@ SQLAlchemy model for the applications table.
 Maps to DB/001_postgresql_schema.sql — applications.
 """
 
+from app.utils.time import utc_now
 from datetime import datetime
 from decimal import Decimal
 from typing import Optional
@@ -84,9 +85,9 @@ class Application(Base):
     withdrawal_reason: Mapped[Optional[str]] = mapped_column(Text)
 
     # Dates
-    applied_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    applied_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now)
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
+        DateTime, default=utc_now, onupdate=utc_now
     )
 
     # Relationships

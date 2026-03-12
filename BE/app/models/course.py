@@ -3,6 +3,7 @@ SQLAlchemy models for course-related tables.
 Maps exactly to DB/001_postgresql_schema.sql SECTION 3, 4, 5, 6.
 """
 
+from app.utils.time import utc_now
 import enum
 from datetime import datetime
 from decimal import Decimal
@@ -71,7 +72,7 @@ class Category(Base):
     icon_url: Mapped[Optional[str]] = mapped_column(String(500))
     display_order: Mapped[int] = mapped_column(Integer, default=0)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now)
 
     # Relationships
     courses: Mapped[List["Course"]] = relationship(back_populates="category")
@@ -89,7 +90,7 @@ class Skill(Base):
     description: Mapped[Optional[str]] = mapped_column(Text)
     icon_url: Mapped[Optional[str]] = mapped_column(String(500))
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now)
 
 
 # ── Course Skills (junction) ──
@@ -126,8 +127,8 @@ class Instructor(Base):
     expertise_areas: Mapped[Optional[str]] = mapped_column(Text)  # JSONB in real schema
     profile_picture_url: Mapped[Optional[str]] = mapped_column(String(500))
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now, onupdate=utc_now)
 
     # Relationships
     courses: Mapped[List["Course"]] = relationship(back_populates="instructor")
@@ -191,8 +192,8 @@ class Course(Base):
     meta_title: Mapped[Optional[str]] = mapped_column(String(255))
     meta_description: Mapped[Optional[str]] = mapped_column(Text)
 
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now, onupdate=utc_now)
 
     # Relationships
     category: Mapped[Optional["Category"]] = relationship(back_populates="courses")
@@ -220,8 +221,8 @@ class Module(Base):
     duration_minutes: Mapped[Optional[int]] = mapped_column(Integer)
     is_preview: Mapped[bool] = mapped_column(Boolean, default=False)
 
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now, onupdate=utc_now)
 
     # Relationships
     course: Mapped["Course"] = relationship(back_populates="modules")
@@ -257,8 +258,8 @@ class Lesson(Base):
     is_preview: Mapped[bool] = mapped_column(Boolean, default=False)
     is_mandatory: Mapped[bool] = mapped_column(Boolean, default=True)
 
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now, onupdate=utc_now)
 
     # Relationships
     module: Mapped["Module"] = relationship(back_populates="lessons")
@@ -291,8 +292,8 @@ class Quiz(Base):
     total_attempts: Mapped[int] = mapped_column(Integer, default=0)
     average_score: Mapped[Decimal] = mapped_column(Numeric(5, 2), default=0)
 
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now, onupdate=utc_now)
 
     # Relationships
     lesson: Mapped["Lesson"] = relationship(back_populates="quizzes")
@@ -320,7 +321,7 @@ class QuizQuestion(Base):
     points: Mapped[int] = mapped_column(Integer, default=1)
     order_index: Mapped[int] = mapped_column(Integer, nullable=False)
 
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now)
 
     # Relationships
     quiz: Mapped["Quiz"] = relationship(back_populates="questions")
@@ -342,8 +343,8 @@ class FlashcardDeck(Base):
     description: Mapped[Optional[str]] = mapped_column(Text)
     total_cards: Mapped[int] = mapped_column(Integer, default=0)
 
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now, onupdate=utc_now)
 
     # Relationships
     flashcards: Mapped[List["Flashcard"]] = relationship(back_populates="deck")
@@ -362,7 +363,7 @@ class Flashcard(Base):
     back_image_url: Mapped[Optional[str]] = mapped_column(String(500))
     order_index: Mapped[Optional[int]] = mapped_column(Integer)
 
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now)
 
     # Relationships
     deck: Mapped["FlashcardDeck"] = relationship(back_populates="flashcards")
@@ -385,7 +386,7 @@ class Enrollment(Base):
     )
     progress_percentage: Mapped[Decimal] = mapped_column(Numeric(5, 2), default=0)
 
-    enrolled_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    enrolled_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now)
     started_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
     completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
     expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
@@ -423,7 +424,7 @@ class LessonProgress(Base):
 
     started_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
     completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
-    last_accessed_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    last_accessed_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now)
 
     __table_args__ = (UniqueConstraint("enrollment_id", "lesson_id"),)
 
@@ -455,7 +456,7 @@ class QuizAttempt(Base):
     total_questions: Mapped[int] = mapped_column(Integer, nullable=False)
     correct_answers: Mapped[int] = mapped_column(Integer, nullable=False)
 
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now)
 
 
 # ── Materials ──
@@ -488,8 +489,8 @@ class Material(Base):
     download_count: Mapped[int] = mapped_column(Integer, default=0)
     is_published: Mapped[bool] = mapped_column(Boolean, default=True)
 
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now, onupdate=utc_now)
 
     # Relationships
     course: Mapped[Optional["Course"]] = relationship(back_populates="materials")

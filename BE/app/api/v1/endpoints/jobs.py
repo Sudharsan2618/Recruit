@@ -1,5 +1,6 @@
 """Job management endpoints for company portal."""
 
+from app.utils.time import utc_now
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException, Header, Query
@@ -10,22 +11,12 @@ from datetime import datetime
 
 from app.db.postgres import get_db
 from app.services.job_service import JobService
-from app.services.auth_service import decode_access_token
 from app.schemas.job import JobCreateRequest, JobOut
-from app.api.v1.endpoints.notifications import create_notification
+from app.api.dependencies import require_company
+from app.services.notification_service import create_notification
 
 router = APIRouter(prefix="/jobs", tags=["Jobs"])
 
-
-async def _get_current_user_id(authorization: Optional[str] = Header(None)) -> int:
-    """Extract user_id from Bearer token."""
-    if not authorization or not authorization.startswith("Bearer "):
-        raise HTTPException(status_code=401, detail="Missing or invalid token")
-    token = authorization.split(" ", 1)[1]
-    payload = decode_access_token(token)
-    if not payload:
-        raise HTTPException(status_code=401, detail="Invalid or expired token")
-    return int(payload.get("sub", 0))
 
 
 def get_service(db: AsyncSession = Depends(get_db)) -> JobService:
@@ -35,12 +26,12 @@ def get_service(db: AsyncSession = Depends(get_db)) -> JobService:
 @router.post("/company", response_model=JobOut)
 async def create_job(
     body: JobCreateRequest,
-    user_id: int = Depends(_get_current_user_id),
+    company: dict = Depends(require_company),
     service: JobService = Depends(get_service),
 ):
     """Create a new job posting for the authenticated company."""
     try:
-        data = await service.create_job(user_id, body.model_dump())
+        data = await service.create_job(company["user_id"], body.model_dump())
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     return JobOut(**data)
@@ -48,12 +39,12 @@ async def create_job(
 
 @router.get("/company", response_model=List[JobOut])
 async def list_company_jobs(
-    user_id: int = Depends(_get_current_user_id),
+    company: dict = Depends(require_company),
     service: JobService = Depends(get_service),
 ):
     """List all jobs for the authenticated company."""
     try:
-        jobs = await service.get_company_jobs(user_id)
+        jobs = await service.get_company_jobs(company["user_id"])
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     return [JobOut(**j) for j in jobs]
@@ -65,18 +56,11 @@ async def get_company_candidates(
     search: str = Query(""),
     limit: int = Query(100, ge=1, le=500),
     offset: int = Query(0, ge=0),
-    user_id: int = Depends(_get_current_user_id),
+    company: dict = Depends(require_company),
     db: AsyncSession = Depends(get_db),
 ):
     """Get all candidates forwarded to this company across all jobs."""
-    # Resolve company_id
-    comp = await db.execute(
-        text("SELECT company_id FROM companies WHERE user_id = :uid"),
-        {"uid": user_id},
-    )
-    company_id = comp.scalar()
-    if not company_id:
-        raise HTTPException(status_code=404, detail="Company profile not found")
+    company_id = company["company_id"]
 
     where_clauses = [
         "j.company_id = :company_id",
@@ -173,7 +157,7 @@ async def get_company_candidates(
 async def update_candidate_stage(
     application_id: int,
     new_stage: str = Query(..., description="new_candidates, under_review, interviewing, offer_extended, hired, rejected"),
-    user_id: int = Depends(_get_current_user_id),
+    company: dict = Depends(require_company),
     db: AsyncSession = Depends(get_db),
 ):
     """Update a candidate's pipeline stage from the company side."""
@@ -181,11 +165,7 @@ async def update_candidate_stage(
     if new_stage not in valid_stages:
         raise HTTPException(status_code=400, detail=f"Invalid stage. Use one of: {valid_stages}")
 
-    # Verify this application belongs to the company
-    comp = await db.execute(text("SELECT company_id FROM companies WHERE user_id = :uid"), {"uid": user_id})
-    company_id = comp.scalar()
-    if not company_id:
-        raise HTTPException(status_code=404, detail="Company not found")
+    company_id = company["company_id"]
 
     check = await db.execute(
         text("""
@@ -198,7 +178,7 @@ async def update_candidate_stage(
     if not check.scalar():
         raise HTTPException(status_code=404, detail="Application not found or not your company")
 
-    now = datetime.utcnow()
+    now = utc_now()
     # Map stage to application status
     stage_to_status = {
         "under_review": "under_company_review",
@@ -243,9 +223,9 @@ async def update_candidate_stage(
         if stu:
             title_tpl, msg_tpl = stage_labels[new_stage]
             await create_notification(
-                db, stu["user_id"], "application_update",
-                title_tpl,
-                msg_tpl.format(job=stu["job_title"]),
+                    stu["user_id"], "application_update",
+                    title_tpl,
+                    msg_tpl.format(job=stu["job_title"]),
                 email=stu["email"],
                 action_url="/student/jobs?tab=applications",
                 action_text="View Updates",

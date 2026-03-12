@@ -1,5 +1,6 @@
 """Certificate API — issue and retrieve course completion certificates."""
 
+from app.utils.time import utc_now
 from typing import Optional
 from datetime import datetime
 
@@ -9,9 +10,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
 
 from app.db.postgres import get_db
-from app.services.auth_service import decode_access_token
 from app.services.embedding_service import generate_student_embedding
-from app.api.v1.endpoints.notifications import create_notification
+from app.api.dependencies import require_student
 
 import logging
 logger = logging.getLogger(__name__)
@@ -19,27 +19,17 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/certificates", tags=["Certificates"])
 
 
-# ── Auth helper ──────────────────────────────────────────────────────────
-
-async def _get_current_user_id(authorization: Optional[str] = Header(None)) -> int:
-    if not authorization or not authorization.startswith("Bearer "):
-        raise HTTPException(status_code=401, detail="Not authenticated")
-    token = authorization.split(" ")[1]
-    payload = decode_access_token(token)
-    if not payload:
-        raise HTTPException(status_code=401, detail="Invalid or expired token")
-    return int(payload.get("sub", 0))
-
 
 # ── POST /certificates/issue/{enrollment_id} ────────────────────────────
 
 @router.post("/issue/{enrollment_id}")
 async def issue_certificate(
     enrollment_id: int,
-    user_id: int = Depends(_get_current_user_id),
+    student: dict = Depends(require_student),
     db: AsyncSession = Depends(get_db),
 ):
     """Issue a certificate for a completed enrollment."""
+    user_id = student["user_id"]
     # Get enrollment with student + course info
     result = await db.execute(
         text("""
@@ -72,7 +62,7 @@ async def issue_certificate(
 
     # Generate certificate URL (points to our view endpoint)
     cert_url = f"/certificates/view/{enrollment_id}"
-    now = datetime.utcnow()
+    now = utc_now()
 
     # Mark as completed if not already
     await db.execute(
@@ -127,8 +117,9 @@ async def issue_certificate(
 
             if top_matches:
                 match_titles = ", ".join(m["title"] for m in top_matches[:3])
+                from app.services.notification_service import create_notification
                 await create_notification(
-                    db, user_id, "job_match",
+                    user_id, "job_match",
                     "New Job Matches!",
                     f"Based on your completed course \"{row['course_title']}\", we found matching jobs: {match_titles}.",
                     action_url="/student/jobs",
@@ -419,7 +410,7 @@ async def view_certificate(
 
 @router.get("/my")
 async def get_my_certificates(
-    user_id: int = Depends(_get_current_user_id),
+    student: dict = Depends(require_student),
     db: AsyncSession = Depends(get_db),
 ):
     """List all certificates for the current student."""
@@ -434,7 +425,7 @@ async def get_my_certificates(
             WHERE s.user_id = :uid AND e.certificate_issued = true
             ORDER BY e.certificate_issued_at DESC
         """),
-        {"uid": user_id},
+        {"uid": student["user_id"]},
     )
     rows = result.mappings().all()
     certs = []

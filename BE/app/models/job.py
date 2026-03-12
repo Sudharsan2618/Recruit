@@ -3,6 +3,7 @@ SQLAlchemy models for job-related tables.
 Maps to DB/001_postgresql_schema.sql — jobs, job_skills.
 """
 
+from app.utils.time import utc_now
 from datetime import datetime
 from decimal import Decimal
 from typing import Optional, List
@@ -78,8 +79,8 @@ class Job(Base):
     # Admin Pricing
     price_per_candidate: Mapped[Decimal] = mapped_column(Numeric(10, 2), default=0)
 
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now, onupdate=utc_now)
 
     # Relationships
     skills: Mapped[List["JobSkill"]] = relationship(back_populates="job", cascade="all, delete-orphan")

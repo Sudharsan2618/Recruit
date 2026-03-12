@@ -3,6 +3,7 @@ SQLAlchemy models for embedding tables (pgvector).
 Maps to DB/001_postgresql_schema.sql — student_embeddings & job_embeddings.
 """
 
+from app.utils.time import utc_now
 from datetime import datetime
 from typing import Optional
 
@@ -61,9 +62,9 @@ class StudentEmbedding(Base):
         String(100), default="gemini-embedding-001"
     )
     source_text_hash: Mapped[Optional[str]] = mapped_column(String(64))
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now)
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
+        DateTime, default=utc_now, onupdate=utc_now
     )
 
 
@@ -80,7 +81,7 @@ class JobEmbedding(Base):
         String(100), default="gemini-embedding-001"
     )
     source_text_hash: Mapped[Optional[str]] = mapped_column(String(64))
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now)
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
+        DateTime, default=utc_now, onupdate=utc_now
     )

@@ -186,7 +186,8 @@ class CourseRepository:
             )
             from datetime import datetime
             existing.time_spent_seconds += time_spent_seconds
-            existing.video_position_seconds = video_position_seconds
+            if video_position_seconds > 0:
+                existing.video_position_seconds = video_position_seconds
             if is_completed:
                 existing.is_completed = True
                 existing.completed_at = utc_now()

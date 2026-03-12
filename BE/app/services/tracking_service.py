@@ -236,6 +236,7 @@ class TrackingService:
             {"$group": {
                 "_id": "$activity_type",
                 "count": {"$sum": 1},
+                "unique_lessons": {"$addToSet": "$lesson_id"},
                 "total_time": {"$sum": {"$ifNull": ["$details.time_spent_seconds", 0]}},
                 "last_at": {"$max": "$timestamp"},
             }},
@@ -250,6 +251,8 @@ class TrackingService:
         for row in results:
             at = row["_id"]
             count = row["count"]
+            unique_lessons = len([l for l in row.get("unique_lessons", []) if l]) # Count unique valid lesson_ids
+            
             summary.total_time_spent_seconds += row["total_time"]
             if row["last_at"] and (latest is None or row["last_at"] > latest):
                 latest = row["last_at"]
@@ -259,7 +262,8 @@ class TrackingService:
             elif at == ActivityType.LESSON_COMPLETED.value:
                 summary.lessons_completed = count
             elif at == ActivityType.VIDEO_WATCHED.value:
-                summary.videos_watched = count
+                # Use unique lessons watched instead of raw ping count
+                summary.videos_watched = unique_lessons
             elif at in (ActivityType.QUIZ_STARTED.value, ActivityType.QUIZ_SUBMITTED.value):
                 summary.quizzes_taken += count
             elif at == ActivityType.FLASHCARD_INTERACTION.value:

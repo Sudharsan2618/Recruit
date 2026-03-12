@@ -131,17 +131,21 @@ async def enroll_in_course(
     except ValueError as e:
         raise HTTPException(status_code=409, detail=str(e))
 
-    # Regenerate student embedding (now includes enrolled course)
-    try:
-        from app.services.embedding_service import generate_student_embedding
-        import logging
-        emb = await generate_student_embedding(body.student_id)
-        logging.getLogger(__name__).info(
-            f"Enrollment embedding for student {body.student_id}: {emb.get('status') if emb else 'no_data'}"
-        )
-    except Exception as e:
-        import logging
-        logging.getLogger(__name__).warning(f"Enrollment embedding failed: {e}")
+    # Regenerate student embedding in background (non-blocking)
+    import asyncio
+    async def _update_embedding(sid: int):
+        try:
+            from app.services.embedding_service import generate_student_embedding
+            import logging
+            emb = await generate_student_embedding(sid)
+            logging.getLogger(__name__).info(
+                f"Enrollment embedding for student {sid}: {emb.get('status') if emb else 'no_data'}"
+            )
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).warning(f"Enrollment embedding failed: {e}")
+
+    asyncio.create_task(_update_embedding(body.student_id))
 
     return enrollment
 

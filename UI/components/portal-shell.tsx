@@ -1,6 +1,7 @@
 "use client"
 
 import React from "react"
+import dynamic from "next/dynamic"
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
@@ -9,7 +10,11 @@ import { GraduationCap, Menu, X, LogOut, Home } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { useState } from "react"
-import NotificationInbox from "@/components/notification-inbox"
+
+const NotificationInbox = dynamic(() => import("@/components/notification-inbox"), {
+  ssr: false,
+  loading: () => <div className="h-5 w-5" />,
+})
 
 interface NavItem {
   label: string

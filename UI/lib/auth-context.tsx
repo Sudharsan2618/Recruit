@@ -3,7 +3,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback } from "react"
 import { useRouter } from "next/navigation"
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1"
+const API_BASE = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080/api/v1"
 
 export interface AuthUser {
   user_id: number
@@ -84,9 +84,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setLoading(false)
   }, [])
 
-  const _saveSession = useCallback((accessToken: string, userData: AuthUser) => {
+  const _saveSession = useCallback(async (accessToken: string, userData: AuthUser) => {
     setToken(accessToken)
     setUser(userData)
+    // Deprecating auth_token in localStorage, but keep it for immediate client-side compat before cookie is fully propagated if needed, or better, remove it completely. 
+    // Wait, the client.ts now uses credentials: "include" so it works immediately too.
     localStorage.setItem("auth_token", accessToken)
     localStorage.setItem("auth_user", JSON.stringify(userData))
   }, [])
@@ -96,6 +98,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const res = await fetch(`${API_BASE}/auth/login`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify({ email, password }),
       })
 
@@ -105,7 +108,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       const data = await res.json()
-      _saveSession(data.access_token, data.user)
+      await _saveSession(data.access_token, data.user)
       return { success: true }
     } catch (err) {
       return { success: false, error: "Network error. Please try again." }
@@ -117,6 +120,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const res = await fetch(`${API_BASE}/auth/register/student`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify(regData),
       })
 
@@ -126,7 +130,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       const data = await res.json()
-      _saveSession(data.access_token, data.user)
+      await _saveSession(data.access_token, data.user)
       return { success: true }
     } catch (err) {
       return { success: false, error: "Network error. Please try again." }
@@ -138,6 +142,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const res = await fetch(`${API_BASE}/auth/register/company`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        credentials: "include",
         body: JSON.stringify(regData),
       })
 
@@ -147,7 +152,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       const data = await res.json()
-      _saveSession(data.access_token, data.user)
+      await _saveSession(data.access_token, data.user)
       return { success: true }
     } catch (err) {
       return { success: false, error: "Network error. Please try again." }
@@ -165,6 +170,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(null)
     localStorage.removeItem("auth_token")
     localStorage.removeItem("auth_user")
+    // Clear httpOnly cookie via backend
+    fetch(`${API_BASE}/auth/logout`, { method: "POST", credentials: "include" }).catch(console.error)
+    
     if (userType === "admin") {
       router.push("/admin/login")
     } else if (userType === "company") {

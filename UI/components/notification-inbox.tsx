@@ -5,13 +5,16 @@ import { useAuth } from '@/lib/auth-context';
 
 export default function NotificationInbox() {
   const { user } = useAuth();
-  const applicationIdentifier = process.env.NEXT_PUBLIC_NOVU_APPLICATION_IDENTIFIER!;
-  const subscriberId = user?.user_id?.toString() || '6995a72f502262ff00222ddf';
+  const applicationIdentifier = process.env.NEXT_PUBLIC_NOVU_APPLICATION_IDENTIFIER;
+
+  if (!user?.user_id || !applicationIdentifier) {
+    return null;
+  }
 
   return (
     <Inbox
       applicationIdentifier={applicationIdentifier}
-      subscriberId={subscriberId}
+      subscriberId={user.user_id.toString()}
       appearance={{
         variables: {
           colorBackground: '#ffffff',

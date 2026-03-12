@@ -1,5 +1,20 @@
 "use client"
 
+import dynamic from "next/dynamic"
+import ReactMarkdown from "react-markdown"
+import remarkGfm from "remark-gfm"
+const CodePlayground = dynamic(() => import("@/components/code-editor/CodePlayground"), {
+  ssr: false,
+  loading: () => (
+    <div className="flex items-center justify-center py-12 bg-slate-950 rounded-xl border border-slate-800/60">
+      <div className="flex flex-col items-center gap-2">
+        <div className="h-6 w-6 border-2 border-emerald-500/30 border-t-emerald-500 rounded-full animate-spin" />
+        <p className="text-xs text-slate-500">Loading Code Editor...</p>
+      </div>
+    </div>
+  ),
+})
+
 import React, { useState, useEffect, useRef, useCallback } from "react"
 import { useSearchParams, useRouter } from "next/navigation"
 import { Card, CardContent } from "@/components/ui/card"
@@ -28,6 +43,8 @@ import {
   RotateCcw,
   Clock,
   StickyNote,
+  Terminal,
+  Sparkles,
   Save,
   Award,
   Star,
@@ -115,7 +132,11 @@ function PdfViewer({ url }: { url: string }) {
   }
 
   return (
-    <div ref={containerRef} className="flex-1 overflow-y-auto bg-muted/30 px-2 py-4 min-h-[500px] relative">
+    <div 
+      ref={containerRef} 
+      className="flex-1 overflow-y-auto bg-muted/30 px-2 py-4 min-h-[500px] relative"
+      onContextMenu={(e) => e.preventDefault()}
+    >
       {/* Full-screen loader overlay while document loads */}
       {isLoading && (
         <div className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-background/95 backdrop-blur-sm gap-4">
@@ -217,6 +238,9 @@ export default function CoursePlayer() {
   const watchedRangesRef = useRef<[number, number][]>([])
   const lastReportedTimeRef = useRef<number>(0)
 
+  // Code Playground State
+  const [codePlaygroundOpen, setCodePlaygroundOpen] = useState(false)
+
   // Notes State
   const [noteText, setNoteText] = useState<string>("")
   const [notesOpen, setNotesOpen] = useState(false)
@@ -256,13 +280,15 @@ export default function CoursePlayer() {
 
   // Dual-Path Initialization: PostgreSQL (Progress) & MongoDB (Analytics)
   useEffect(() => {
-    if (!user || !course) return
+    const activeUser = user;
+    const activeCourse = course;
+    if (!activeUser || !activeCourse) return;
 
-    async function initTracking() {
+    async function initTracking(u: NonNullable<typeof user>, c: NonNullable<typeof course>) {
       // 1. Initialize MongoDB Tracking Session
       try {
         const sessionRes = await startTrackingSession({
-          user_id: user.user_id,
+          user_id: u.user_id,
           device_info: {
             device_type: window.innerWidth < 768 ? "mobile" : "desktop",
             browser: navigator.userAgent.split(' ').pop(),
@@ -276,8 +302,8 @@ export default function CoursePlayer() {
 
       // 2. Fetch existing progress from PostgreSQL (Current State)
       try {
-        if (user.student_id) {
-          const progress = await getCourseProgress(user.student_id, course.course_id)
+        if (u.student_id) {
+          const progress = await getCourseProgress(u.student_id, c.course_id)
           const completedIds = new Set(progress.filter(p => p.is_completed).map(p => p.lesson_id))
           const progressMap: Record<number, LessonProgressOut> = {}
           progress.forEach(p => { progressMap[p.lesson_id] = p })
@@ -291,8 +317,8 @@ export default function CoursePlayer() {
 
       // 3. Fetch MongoDB Analytics Summary (History/Aggregation)
       try {
-        if (user.student_id) {
-          const summary = await getStudentAnalytics(user.student_id, course.course_id)
+        if (u.student_id) {
+          const summary = await getStudentAnalytics(u.student_id, c.course_id)
           setAnalytics(summary)
         }
       } catch (aErr) {
@@ -301,9 +327,9 @@ export default function CoursePlayer() {
 
       // 4. Fetch enrollment for certificate status
       try {
-        if (user.student_id) {
-          const enrolls = await getEnrollments(user.student_id)
-          const existing = enrolls.find((e) => e.course_id === course.course_id)
+        if (u.student_id) {
+          const enrolls = await getEnrollments(u.student_id)
+          const existing = enrolls.find((e) => e.course_id === c.course_id)
           if (existing) setEnrollment(existing)
         }
       } catch (eErr) {
@@ -311,7 +337,7 @@ export default function CoursePlayer() {
       }
     }
 
-    initTracking()
+    initTracking(activeUser, activeCourse)
   }, [user, course?.course_id])
 
   // Heartbeat Timer (60s)
@@ -667,65 +693,65 @@ export default function CoursePlayer() {
 
   return (
     <div className="flex h-screen flex-col bg-background">
-      {/* Top bar - Production Grade Header */}
-      <header className="flex h-14 items-center gap-2 border-b border-border bg-card/50 backdrop-blur-md px-3 shrink-0 z-20 sm:h-16 sm:gap-4 sm:px-6">
+      {/* Top bar - Professional Header */}
+      <header className="flex h-[56px] items-center gap-3 border-b border-border/60 bg-white/80 dark:bg-slate-950/80 backdrop-blur-xl px-4 shrink-0 z-20 sm:h-[60px] sm:gap-4 sm:px-6">
         <Button 
           variant="ghost" 
           size="icon" 
           onClick={() => router.push("/student/courses")}
-          className="hover:bg-accent rounded-full"
+          className="hover:bg-muted rounded-lg h-9 w-9"
         >
-          <ArrowLeft className="h-5 w-5" />
+          <ArrowLeft className="h-4 w-4" />
         </Button>
         <div className="hidden sm:flex flex-col min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <Badge variant="secondary" className="bg-primary/10 text-primary hover:bg-primary/20 transition-colors py-0 px-2 text-[10px] uppercase tracking-wider font-bold">
+          <div className="flex items-center gap-2.5">
+            <Badge variant="secondary" className="bg-primary/8 text-primary hover:bg-primary/12 transition-colors py-0.5 px-2.5 text-[10px] uppercase tracking-[0.08em] font-semibold rounded-md">
               {course.category?.name || "Course"}
             </Badge>
-            <p className="text-sm font-bold text-foreground truncate">{course.title}</p>
+            <p className="text-[13px] font-semibold text-foreground truncate tracking-tight">{course.title}</p>
           </div>
-          <div className="flex items-center gap-3 mt-1">
-            <div className="w-48 bg-muted rounded-full h-1.5 overflow-hidden">
+          <div className="flex items-center gap-2.5 mt-1">
+            <div className="w-32 bg-muted/60 rounded-full h-[5px] overflow-hidden">
               <div 
-                className="bg-primary h-full transition-all duration-500 ease-out shadow-[0_0_8px_rgba(var(--primary),0.5)]" 
+                className="bg-gradient-to-r from-primary to-emerald-500 h-full transition-all duration-700 ease-out rounded-full" 
                 style={{ width: `${progressPercent}%` }}
               />
             </div>
-            <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-tight">
+            <span className="text-[10px] font-semibold text-muted-foreground tracking-wide">
               {progressPercent}% Complete
             </span>
           </div>
         </div>
-        <div className="flex items-center gap-4 ml-auto">
+        <div className="flex items-center gap-3 ml-auto">
           {analytics && (
-             <div className="hidden lg:flex items-center gap-4 px-4 border-l border-border h-8">
+             <div className="hidden lg:flex items-center gap-3 px-3 border-l border-border/50 h-8">
                <div className="flex items-center gap-1.5">
-                  <Clock className="w-3.5 h-3.5 text-slate-400" />
-                  <span className="text-[11px] font-medium text-slate-500">
+                  <Clock className="w-3.5 h-3.5 text-muted-foreground/60" />
+                  <span className="text-[11px] font-medium text-muted-foreground">
                     {Math.round(analytics.total_time_spent_seconds / 60)}m spent
                   </span>
                </div>
                <div className="flex items-center gap-1.5">
-                  <Badge variant="outline" className="text-[10px] bg-emerald-500/5 text-emerald-600 border-emerald-500/20 py-0 px-1.5">
+                  <Badge variant="outline" className="text-[10px] font-semibold bg-emerald-500/5 text-emerald-600 border-emerald-500/15 py-0 px-2 rounded-md">
                     {analytics.lessons_completed} completed
                   </Badge>
                </div>
              </div>
           )}
           <div className="hidden md:flex flex-col items-end">
-            <span className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">Progress</span>
-            <span className="text-xs font-semibold">{completedLessons.size} of {totalLessons} Lessons</span>
+            <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Progress</span>
+            <span className="text-xs font-semibold text-foreground tracking-tight">{completedLessons.size} of {totalLessons} Lessons</span>
           </div>
           <Button
             variant="ghost"
             size="icon"
             onClick={() => setSidebarOpen(!sidebarOpen)}
             className={cn(
-              "rounded-full transition-all duration-300",
-              sidebarOpen ? "bg-accent text-accent-foreground" : "hover:bg-accent"
+              "rounded-lg h-9 w-9 transition-all duration-200",
+              sidebarOpen ? "bg-muted text-foreground" : "hover:bg-muted"
             )}
           >
-            {sidebarOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
+            {sidebarOpen ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
           </Button>
         </div>
       </header>
@@ -765,7 +791,7 @@ export default function CoursePlayer() {
       {/* Main content - Immersive Layout */}
       <div className="flex flex-1 overflow-hidden relative">
         {/* Content area */}
-        <div className="flex flex-1 flex-col overflow-y-auto bg-background px-3 sm:px-4 lg:px-6">
+        <div className="flex flex-1 flex-col overflow-y-auto bg-background">
           {/* Video / Content Wrapper */}
           <div className={cn("w-full relative flex flex-col group", currentLesson?.content_type === "video" ? "bg-black" : "bg-background")}>
             <div className="w-full relative flex-1 flex flex-col">
@@ -785,9 +811,9 @@ export default function CoursePlayer() {
                     <div className="aspect-video relative bg-black">
                       <iframe
                         key={`${currentLesson.lesson_id}-${savedPosition}`}
-                        src={`https://www.youtube.com/embed/${currentLesson.video_external_id}?rel=0&modestbranding=1&showinfo=0&autoplay=1&start=${savedPosition || 0}&enablejsapi=1&origin=${typeof window !== 'undefined' ? encodeURIComponent(window.location.origin) : ''}`}
+                        src={`https://www.youtube.com/embed/${currentLesson.video_external_id}?rel=0&modestbranding=1&showinfo=0&autoplay=1&start=${savedPosition || 0}&enablejsapi=1&controls=0&disablekb=1&fs=0&playsinline=1&origin=${typeof window !== 'undefined' ? encodeURIComponent(window.location.origin) : ''}`}
                         className="absolute inset-0 h-full w-full border-0"
-                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope"
                         allowFullScreen
                         title={currentLesson.title}
                       />
@@ -802,10 +828,21 @@ export default function CoursePlayer() {
                         key={`mp4-${currentLesson.lesson_id}`}
                         src={currentLesson.content_url}
                         controls
+                        controlsList="nodownload noplaybackrate"
+                        disablePictureInPicture
+                        onContextMenu={(e) => e.preventDefault()}
                         autoPlay
                         className="absolute inset-0 h-full w-full"
                         onTimeUpdate={(e) => {
-                          videoTimeRef.current = e.currentTarget.currentTime
+                          if (!e.currentTarget.seeking) {
+                            videoTimeRef.current = e.currentTarget.currentTime
+                          }
+                        }}
+                        onSeeking={(e) => {
+                          const delta = Math.abs(e.currentTarget.currentTime - videoTimeRef.current)
+                          if (delta > 1.5) {
+                            e.currentTarget.currentTime = videoTimeRef.current
+                          }
                         }}
                         onLoadedMetadata={(e) => {
                           // Resume from saved position
@@ -994,24 +1031,57 @@ export default function CoursePlayer() {
                               title={currentLesson.title}
                               style={{ minHeight: '500px' }}
                             />
+                            {/* Security overlay to block Office Viewer bottom-right menu (Download/Print) */}
+                            <div className="absolute bottom-0 right-0 w-[240px] h-[45px] z-10 cursor-not-allowed bg-transparent" title="Menu disabled for security" />
                           </div>
                         ) : (
-                          <iframe
-                            src={`https://docs.google.com/gview?url=${encodeURIComponent(url)}&embedded=true`}
-                            className="flex-1 w-full border-none min-h-[600px]"
-                            title={currentLesson.title}
-                          />
+                          <div className="flex-1 flex flex-col relative min-h-[600px]">
+                            <iframe
+                              src={`https://docs.google.com/gview?url=${encodeURIComponent(url)}&embedded=true`}
+                              className="flex-1 w-full border-none min-h-[600px]"
+                              title={currentLesson.title}
+                            />
+                            {/* Security overlay to block Google Docs top-right popout */}
+                            <div className="absolute top-0 right-0 w-[60px] h-[60px] z-10 cursor-not-allowed bg-transparent" title="Popout disabled for security" />
+                          </div>
                         )}
                       </div>
                     )
                   })()}
 
-                  {/* Text content display */}
+                  {/* Text/Practice content — Playground-first layout */}
                   {currentLesson?.content_type === "text" && currentLesson?.text_content && (
-                    <div className="flex-1 p-8 bg-background min-h-[400px]">
-                      <pre className="whitespace-pre-wrap font-sans text-sm leading-relaxed text-foreground max-w-4xl mx-auto">
-                        {currentLesson.text_content}
-                      </pre>
+                    <div className="flex-1 flex flex-col min-h-[400px]">
+                      {/* Code Playground — Primary Feature */}
+                      <div className="px-4 pt-4 sm:px-6 lg:px-8">
+                        <CodePlayground lessonContent={currentLesson?.text_content ?? undefined} />
+                      </div>
+
+                      {/* Exercise Instructions — Collapsible reference below */}
+                      <div className="px-4 py-5 sm:px-6 lg:px-8">
+                        <button
+                          onClick={() => setCodePlaygroundOpen(!codePlaygroundOpen)}
+                          className="flex items-center gap-3 w-full px-5 py-3.5 rounded-xl bg-gradient-to-r from-amber-500/5 via-orange-500/5 to-amber-500/5 hover:from-amber-500/10 hover:via-orange-500/10 hover:to-amber-500/10 border border-amber-500/15 hover:border-amber-500/25 transition-all duration-300 group"
+                        >
+                          <div className="p-1.5 rounded-lg bg-amber-500/10">
+                            <Sparkles className="w-4 h-4 text-amber-500" />
+                          </div>
+                          <span className="text-sm font-semibold text-foreground tracking-tight">Exercise Instructions</span>
+                          <Badge variant="outline" className="text-[9px] px-2 py-0 ml-1 border-amber-500/20 text-amber-600 bg-amber-500/5 font-bold">
+                            {currentLesson.text_content.match(/```sql/g)?.length || 0} exercises
+                          </Badge>
+                          <ChevronDown className={cn("w-4 h-4 ml-auto transition-transform duration-300 text-muted-foreground group-hover:text-foreground", codePlaygroundOpen && "rotate-180")} />
+                        </button>
+                        {codePlaygroundOpen && (
+                          <div className="mt-4 px-2 animate-in fade-in slide-in-from-top-2 duration-300">
+                            <div className="prose prose-sm dark:prose-invert prose-headings:font-bold prose-headings:tracking-tight prose-headings:text-foreground prose-h2:text-xl prose-h3:text-base prose-p:text-foreground/75 prose-p:leading-relaxed prose-strong:text-foreground prose-code:text-emerald-500 prose-code:bg-emerald-500/5 prose-code:border prose-code:border-emerald-500/10 prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded-md prose-code:text-xs prose-code:font-semibold prose-pre:bg-slate-950 prose-pre:border prose-pre:border-slate-800/60 prose-pre:text-slate-200 prose-pre:rounded-xl prose-li:text-foreground/75 prose-li:leading-relaxed prose-a:text-primary prose-a:font-medium max-w-none">
+                              <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                                {currentLesson.text_content}
+                              </ReactMarkdown>
+                            </div>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   )}
 
@@ -1058,7 +1128,7 @@ export default function CoursePlayer() {
           {/* Lesson Info Area - Consistent with app design system */}
           {currentLesson?.content_type !== "quiz" && (
             <div className="bg-background border-t border-border">
-              <div className="max-w-5xl mx-auto px-3 py-6 sm:px-6 sm:py-8 lg:px-8">
+              <div className="max-w-5xl mx-auto px-4 py-8 sm:px-6 sm:py-10 lg:px-8">
                 <div className="flex flex-col lg:flex-row gap-8">
                   {/* Left: Lesson Details */}
                   <div className="flex-1 space-y-6">
@@ -1079,19 +1149,20 @@ export default function CoursePlayer() {
                             : currentLesson?.content_type || "Lesson"
                         }</Badge>
                       </div>
-                      <h2 className="text-2xl font-bold text-foreground">
+                      <h2 className="text-xl sm:text-2xl font-bold text-foreground tracking-tight leading-tight">
                         {currentLesson?.title || "Select a lesson"}
                       </h2>
                     </div>
 
                     {/* Text Content */}
-                    {currentLesson?.text_content ? (
-                      <Card className="border-border">
-                        <CardContent className="p-6">
-                          <div className="space-y-4 text-sm text-foreground/80 leading-relaxed">
-                            {currentLesson.text_content.split('\n\n').map((para, i) => (
-                              <p key={i}>{para}</p>
-                            ))}
+                    {/* Text Content (for non-text-type lessons only, since text lessons show content in main area) */}
+                    {currentLesson?.content_type !== "text" && currentLesson?.text_content ? (
+                      <Card className="border-border/60 shadow-sm">
+                        <CardContent className="p-5 sm:p-6">
+                          <div className="prose prose-sm dark:prose-invert prose-headings:font-bold prose-headings:tracking-tight prose-headings:text-foreground prose-p:text-foreground/75 prose-p:leading-relaxed prose-strong:text-foreground prose-code:text-emerald-500 prose-code:bg-emerald-500/5 prose-code:border prose-code:border-emerald-500/10 prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded-md prose-code:text-xs prose-pre:bg-slate-950 prose-pre:border prose-pre:border-slate-800/60 prose-pre:text-slate-200 prose-pre:rounded-xl prose-li:text-foreground/75 max-w-none">
+                            <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                              {currentLesson.text_content}
+                            </ReactMarkdown>
                           </div>
                         </CardContent>
                       </Card>
@@ -1104,6 +1175,26 @@ export default function CoursePlayer() {
                         </CardContent>
                       </Card>
                     ) : null}
+
+                    {/* Code Playground Panel — only for non-text lessons */}
+                    {currentLesson?.content_type !== "text" && (
+                    <div className="border-t border-border pt-4">
+                      <button
+                        onClick={() => setCodePlaygroundOpen(!codePlaygroundOpen)}
+                        className="flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors w-full"
+                      >
+                        <Terminal className="w-4 h-4" />
+                        <span>Code Playground</span>
+                        <Badge variant="outline" className="text-[9px] px-1.5 py-0 ml-1 border-emerald-500/30 text-emerald-500 bg-emerald-500/5">SQL / Python</Badge>
+                        <ChevronDown className={cn("w-4 h-4 ml-auto transition-transform", codePlaygroundOpen && "rotate-180")} />
+                      </button>
+                      {codePlaygroundOpen && (
+                        <div className="mt-3 animate-in fade-in slide-in-from-top-2 duration-200">
+                          <CodePlayground lessonContent={currentLesson?.text_content ?? undefined} />
+                        </div>
+                      )}
+                    </div>
+                    )}
 
                     {/* Notes Panel */}
                     <div className="border-t border-border pt-4">
@@ -1136,13 +1227,13 @@ export default function CoursePlayer() {
                     </div>
 
                     {/* Instructor */}
-                    <div className="flex items-center gap-3 pt-4 border-t border-border">
-                      <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center text-sm font-bold text-primary">
+                    <div className="flex items-center gap-3 pt-5 border-t border-border/60">
+                      <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center text-sm font-bold text-primary ring-1 ring-primary/10">
                         {course?.instructor?.first_name?.[0]}{course?.instructor?.last_name?.[0]}
                       </div>
                       <div>
-                        <p className="text-xs text-muted-foreground">Instructor</p>
-                        <p className="text-sm font-semibold text-foreground">
+                        <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Instructor</p>
+                        <p className="text-sm font-semibold text-foreground tracking-tight">
                           {course?.instructor?.first_name} {course?.instructor?.last_name}
                         </p>
                       </div>
@@ -1248,41 +1339,41 @@ export default function CoursePlayer() {
           )}
         </div>
 
-        {/* Premium Sidebar - Curriculum Panel */}
+        {/* Professional Sidebar - Curriculum Panel */}
         {sidebarOpen && (
-          <aside className="absolute inset-0 sm:relative sm:inset-auto w-full sm:w-[330px] flex flex-col border-l border-border/40 bg-gradient-to-b from-white to-slate-50 dark:from-slate-900 dark:to-slate-950 overflow-hidden shrink-0 z-30 sm:z-10 animate-in slide-in-from-right duration-500 shadow-[-8px_0_30px_rgba(0,0,0,0.06)]">
+          <aside className="absolute inset-0 sm:relative sm:inset-auto w-full sm:w-[300px] flex flex-col border-l border-border/30 bg-white dark:bg-slate-950 overflow-hidden shrink-0 z-30 sm:z-10 animate-in slide-in-from-right duration-300">
             {/* Sidebar Header */}
-            <div className="px-4 pt-4 pb-4 border-b border-border/30 sm:px-7 sm:pt-7 sm:pb-5">
-              <div className="flex items-center justify-between mb-4">
+            <div className="px-5 pt-5 pb-4 border-b border-border/30">
+              <div className="flex items-center justify-between mb-3">
                 <div>
-                  <p className="text-[10px] font-bold text-primary uppercase tracking-[0.2em] mb-1">Course Content</p>
-                  <h4 className="text-lg font-extrabold text-foreground tracking-tight">Curriculum</h4>
+                  <p className="text-[10px] font-semibold text-primary uppercase tracking-[0.15em] mb-0.5">Course Content</p>
+                  <h4 className="text-base font-bold text-foreground tracking-tight">Curriculum</h4>
                 </div>
                 <div className="flex items-center gap-2">
-                  <Badge variant="outline" className="text-[10px] font-bold border-primary/20 text-primary bg-primary/5 uppercase py-1.5 px-3 rounded-full">
+                  <Badge variant="outline" className="text-[10px] font-semibold border-border/50 text-muted-foreground bg-muted/30 py-1 px-2.5 rounded-md">
                     {totalLessons} Lessons
                   </Badge>
-                  <Button variant="ghost" size="icon" className="sm:hidden h-8 w-8 rounded-full" onClick={() => setSidebarOpen(false)}>
+                  <Button variant="ghost" size="icon" className="sm:hidden h-8 w-8 rounded-lg" onClick={() => setSidebarOpen(false)}>
                     <X className="h-4 w-4" />
                   </Button>
                 </div>
               </div>
-              {/* Mini progress bar in header */}
-              <div className="flex items-center gap-3">
-                <div className="flex-1 h-1.5 bg-muted/60 rounded-full overflow-hidden">
+              {/* Mini progress bar */}
+              <div className="flex items-center gap-2.5">
+                <div className="flex-1 h-1 bg-muted/50 rounded-full overflow-hidden">
                   <div 
                     className="h-full bg-gradient-to-r from-primary to-emerald-400 rounded-full transition-all duration-700 ease-out"
                     style={{ width: `${progressPercent}%` }}
                   />
                 </div>
-                <span className="text-[10px] font-bold text-muted-foreground whitespace-nowrap">
+                <span className="text-[10px] font-semibold text-muted-foreground">
                   {progressPercent}%
                 </span>
               </div>
             </div>
             
             {/* Module List */}
-            <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3" style={{ scrollbarWidth: 'thin', scrollbarColor: 'hsl(var(--border)) transparent' }}>
+            <div className="flex-1 overflow-y-auto px-3 py-3 space-y-1.5" style={{ scrollbarWidth: 'thin', scrollbarColor: 'hsl(var(--border)) transparent' }}>
               {course.modules.map((mod, modIdx) => {
                 const moduleLessons = mod.lessons
                 const moduleCompletedCount = moduleLessons.filter(l => completedLessons.has(l.lesson_id)).length
@@ -1293,65 +1384,59 @@ export default function CoursePlayer() {
                   <div 
                     key={mod.module_id} 
                     className={cn(
-                      "rounded-2xl border overflow-hidden transition-all duration-300",
+                      "rounded-xl overflow-hidden transition-all duration-200",
                       isModuleExpanded 
-                        ? "border-primary/15 bg-white dark:bg-slate-900/60 shadow-lg shadow-primary/5" 
-                        : "border-border/40 bg-white/60 dark:bg-slate-900/30 hover:border-border/60 hover:shadow-md"
+                        ? "bg-muted/30 dark:bg-slate-900/40" 
+                        : "hover:bg-muted/20"
                     )}
                   >
                     {/* Module Header */}
                     <button
                       onClick={() => toggleModule(mod.module_id)}
-                      className="flex w-full items-center gap-4 px-5 py-4 text-left transition-all duration-200 group/module"
+                      className="flex w-full items-center gap-3 px-3.5 py-3 text-left transition-all duration-200 group/module"
                     >
                       {/* Module Number Badge */}
                       <div className={cn(
-                        "h-11 w-11 rounded-[14px] flex items-center justify-center text-sm font-extrabold shrink-0 transition-all duration-300",
+                        "h-9 w-9 rounded-lg flex items-center justify-center text-xs font-bold shrink-0 transition-all duration-200",
                         hasActiveLesson || isModuleExpanded
-                          ? "bg-gradient-to-br from-primary to-emerald-500 text-white shadow-md shadow-primary/20"
-                          : "bg-slate-100 dark:bg-slate-800 text-slate-400 dark:text-slate-500 group-hover/module:bg-primary/10 group-hover/module:text-primary"
+                          ? "bg-primary text-white"
+                          : "bg-muted/60 dark:bg-slate-800 text-muted-foreground group-hover/module:bg-primary/10 group-hover/module:text-primary"
                       )}>
                         {modIdx + 1}
                       </div>
 
                       {/* Module Info */}
                       <div className="min-w-0 flex-1">
-                        <p className="truncate text-[13px] font-bold text-foreground leading-tight">{mod.title}</p>
-                        <div className="flex items-center gap-1 mt-1.5">
-                          <span className="text-[10px] font-semibold text-muted-foreground/70 uppercase tracking-wider flex items-center gap-1">
-                            <span className="w-1 h-1 rounded-full bg-muted-foreground/30 inline-block" />
+                        <p className="truncate text-[13px] font-semibold text-foreground leading-tight tracking-tight">{mod.title}</p>
+                        <div className="flex items-center gap-1.5 mt-1">
+                          <span className="text-[10px] font-medium text-muted-foreground">
                             {mod.lessons.length} Stages
                           </span>
-                          <span className="text-muted-foreground/30 mx-1">•</span>
-                          <span className="text-[10px] font-semibold text-muted-foreground/70 uppercase tracking-wider">
+                          <span className="text-muted-foreground/30">•</span>
+                          <span className="text-[10px] font-medium text-muted-foreground">
                             {mod.duration_minutes || 0} Min
                           </span>
-                          {moduleCompletedCount > 0 && (
-                            <>
-                              <span className="text-muted-foreground/30 mx-1">•</span>
-                              <span className="text-[10px] font-semibold text-emerald-500 uppercase tracking-wider">
-                                {moduleCompletedCount}/{moduleLessons.length} Done
-                              </span>
-                            </>
-                          )}
                         </div>
                       </div>
 
-                      {/* Expand/Collapse Toggle */}
-                      <div className={cn(
-                        "flex h-8 w-8 items-center justify-center rounded-full transition-all duration-300",
-                        isModuleExpanded 
-                          ? "bg-primary/10 text-primary rotate-180" 
-                          : "bg-slate-100 dark:bg-slate-800 text-muted-foreground/50 group-hover/module:bg-primary/10 group-hover/module:text-primary"
-                      )}>
-                        <ChevronDown className="h-4 w-4" />
+                      {/* Progress fraction + Expand toggle */}
+                      <div className="flex items-center gap-2 shrink-0">
+                        {moduleCompletedCount > 0 && (
+                          <span className="text-[10px] font-semibold text-emerald-600 tabular-nums">
+                            {moduleCompletedCount}/{moduleLessons.length}
+                          </span>
+                        )}
+                        <ChevronDown className={cn(
+                          "h-3.5 w-3.5 text-muted-foreground/50 transition-transform duration-200",
+                          isModuleExpanded && "rotate-180 text-primary"
+                        )} />
                       </div>
                     </button>
                     
                     {/* Expanded Lesson List */}
                     {isModuleExpanded && (
-                      <div className="pb-3 px-3 animate-in slide-in-from-top-2 fade-in duration-300">
-                        <div className="space-y-1">
+                      <div className="pb-2 px-2 animate-in fade-in duration-200">
+                        <div className="space-y-0.5">
                           {mod.lessons.map((lesson) => {
                             const Icon = contentTypeIcons[lesson.content_type] || FileText
                             const isActive = currentLesson?.lesson_id === lesson.lesson_id
@@ -1361,34 +1446,29 @@ export default function CoursePlayer() {
                                 key={lesson.lesson_id}
                                 onClick={() => handleLessonClick(lesson)}
                                 className={cn(
-                                  "flex w-full items-center gap-3.5 rounded-xl px-4 py-3.5 text-[13px] transition-all duration-200 group/lesson relative",
+                                  "flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-[12.5px] transition-all duration-150 group/lesson",
                                   isActive
-                                    ? "bg-gradient-to-r from-primary to-teal-600 text-white shadow-lg shadow-primary/25"
-                                    : "text-foreground/70 hover:bg-slate-50 dark:hover:bg-slate-800/50 hover:text-foreground"
+                                    ? "bg-primary text-white"
+                                    : "text-foreground/70 hover:bg-muted/50 hover:text-foreground"
                                 )}
                               >
-                                {/* Active Indicator Bar */}
-                                {isActive && (
-                                  <div className="absolute left-0 top-2 bottom-2 w-1 bg-white/80 rounded-r-full" />
-                                )}
-
                                 {/* Lesson Icon */}
                                 <div className={cn(
-                                  "relative flex h-9 w-9 shrink-0 items-center justify-center rounded-xl transition-all duration-200",
+                                  "relative flex h-7 w-7 shrink-0 items-center justify-center rounded-lg transition-all duration-150",
                                   isActive 
                                     ? "bg-white/20" 
                                     : isCompleted 
                                       ? "bg-emerald-50 dark:bg-emerald-500/10" 
-                                      : "bg-slate-100 dark:bg-slate-800 group-hover/lesson:bg-primary/10"
+                                      : "bg-muted/50 dark:bg-slate-800 group-hover/lesson:bg-primary/5"
                                 )}>
                                   {isCompleted && !isActive ? (
-                                    <CheckCircle2 className="h-4 w-4 text-emerald-500" />
+                                    <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
                                   ) : (
                                     <Icon className={cn(
-                                      "h-4 w-4 transition-colors",
+                                      "h-3.5 w-3.5 transition-colors",
                                       isActive 
                                         ? "text-white" 
-                                        : "text-slate-400 dark:text-slate-500 group-hover/lesson:text-primary"
+                                        : "text-muted-foreground/60 group-hover/lesson:text-primary"
                                     )} />
                                   )}
                                 </div>
@@ -1396,14 +1476,14 @@ export default function CoursePlayer() {
                                 {/* Lesson Title */}
                                 <span className={cn(
                                   "truncate text-left flex-1 leading-tight",
-                                  isActive ? "font-bold" : "font-medium"
+                                  isActive ? "font-semibold" : "font-medium"
                                 )}>
                                   {lesson.title}
                                 </span>
 
                                 {/* Completed Check for Active */}
                                 {isCompleted && isActive && (
-                                  <CheckCircle2 className="h-4 w-4 text-white/70 shrink-0" />
+                                  <CheckCircle2 className="h-3.5 w-3.5 text-white/70 shrink-0" />
                                 )}
                               </button>
                             )

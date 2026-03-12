@@ -6,7 +6,6 @@ import { Progress } from "@/components/ui/progress"
 import { BookOpen, Clock, Trophy, Flame, Briefcase, ArrowRight } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import Link from "next/link"
-import { Bar, BarChart, ResponsiveContainer, XAxis, YAxis, Tooltip } from "recharts"
 import { DashboardSkeleton } from "@/components/skeletons"
 import { getStudentDashboard, type StudentDashboardData } from "@/lib/api"
 

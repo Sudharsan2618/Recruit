@@ -3,7 +3,8 @@
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
-import { GraduationCap, ArrowRight, Eye, EyeOff, Loader2 } from "lucide-react"
+import { ArrowRight, Eye, EyeOff, Loader2 } from "lucide-react"
+import { Logo } from "@/components/logo"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -39,9 +40,7 @@ export default function StudentLoginPage() {
       <div className="mx-auto grid min-h-screen max-w-6xl items-center gap-8 px-4 py-8 sm:gap-12 sm:px-6 sm:py-12 lg:grid-cols-2">
         <div className="flex flex-col gap-6">
           <div className="flex items-center gap-3">
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-primary">
-              <GraduationCap className="h-6 w-6 text-primary-foreground" />
-            </div>
+            <Logo size={48} />
             <div>
               <p className="text-sm font-semibold text-muted-foreground">SkillBridge</p>
               <h1 className="text-2xl font-bold text-foreground">Student Portal</h1>
@@ -114,6 +113,11 @@ export default function StudentLoginPage() {
                     {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
                   </button>
                 </div>
+              </div>
+              <div className="flex justify-end">
+                <Link href="/forgot-password" className="text-xs text-muted-foreground hover:text-foreground transition-colors">
+                  Forgot password?
+                </Link>
               </div>
               <Button type="submit" className="w-full" disabled={isLoading}>
                 {isLoading ? (

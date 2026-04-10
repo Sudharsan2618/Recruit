@@ -113,6 +113,11 @@ export default function CompanyLoginPage() {
                   </button>
                 </div>
               </div>
+              <div className="flex justify-end">
+                <Link href="/forgot-password" className="text-xs text-muted-foreground hover:text-foreground transition-colors">
+                  Forgot password?
+                </Link>
+              </div>
               <Button type="submit" className="w-full" disabled={isLoading}>
                 {isLoading ? (
                   <>

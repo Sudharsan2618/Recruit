@@ -2,7 +2,8 @@
 
 import { useState } from "react"
 import { useRouter } from "next/navigation"
-import { GraduationCap, ArrowRight, ArrowLeft, Loader2, User, Briefcase, Link2, CheckCircle2 } from "lucide-react"
+import { ArrowRight, ArrowLeft, Loader2, User, Briefcase, Link2, CheckCircle2 } from "lucide-react"
+import { Logo } from "@/components/logo"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -138,9 +139,7 @@ export default function StudentOnboardingPage() {
       <div className="mx-auto flex min-h-screen max-w-3xl flex-col px-4 py-8 sm:px-6 sm:py-12">
         {/* Header */}
         <div className="flex items-center gap-3 mb-8">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary">
-            <GraduationCap className="h-5 w-5 text-primary-foreground" />
-          </div>
+          <Logo size={40} />
           <div>
             <p className="text-xs font-semibold text-muted-foreground">SkillBridge</p>
             <h1 className="text-lg font-bold text-foreground">

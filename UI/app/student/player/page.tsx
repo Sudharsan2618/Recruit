@@ -493,7 +493,7 @@ export default function CoursePlayer() {
               ...prev,
               [currentLesson.lesson_id]: { 
                 ...existing, 
-                progress_percentage: currentPercentage,
+                progress_percentage: String(currentPercentage),
                 video_position_seconds: Math.floor(currentTime),
                 is_completed: existing.is_completed || isAutoCompleted
               }

@@ -22,6 +22,7 @@ from app.schemas.auth import (
     StudentDashboardResponse,
     StudentProfileFullOut, StudentProfileUpdateRequest,
     CompanyProfileFullOut, CompanyProfileUpdateRequest,
+    ForgotPasswordRequest, ResetPasswordRequest,
 )
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
@@ -169,6 +170,83 @@ async def logout(response: Response):
     """Clear auth cookie."""
     _clear_auth_cookie(response)
     return {"detail": "Logged out"}
+
+
+@router.post("/forgot-password")
+@limiter.limit("5/minute")
+async def forgot_password(
+    request: Request,
+    body: ForgotPasswordRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """Send a password-reset email if the account exists.
+
+    Always returns 200 to avoid email enumeration.
+    """
+    from sqlalchemy import select
+    from app.models.user import User
+    from jose import jwt
+    from datetime import timedelta
+    from app.config import settings
+    from app.utils.time import utc_now
+    from app.utils.email import send_password_reset_email
+
+    result = await db.execute(select(User).where(User.email == body.email))
+    user = result.scalar_one_or_none()
+
+    if user and user.status == "active":
+        # Create a short-lived reset token (30 min)
+        reset_payload = {
+            "sub": str(user.user_id),
+            "email": user.email,
+            "purpose": "password_reset",
+            "exp": utc_now() + timedelta(minutes=30),
+        }
+        reset_token = jwt.encode(reset_payload, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
+        reset_url = f"{settings.FRONTEND_URL}/reset-password?token={reset_token}"
+
+        # Fire-and-forget email (don't block response)
+        import asyncio
+        asyncio.create_task(send_password_reset_email(user.email, reset_url))
+
+    # Always 200 — no email enumeration
+    return {"detail": "If an account with that email exists, a reset link has been sent."}
+
+
+@router.post("/reset-password")
+@limiter.limit("5/minute")
+async def reset_password(
+    request: Request,
+    body: ResetPasswordRequest,
+    db: AsyncSession = Depends(get_db),
+):
+    """Reset password using a valid reset token."""
+    from jose import jwt, JWTError
+    from sqlalchemy import select
+    from app.models.user import User
+    from app.services.auth_service import hash_password
+    from app.config import settings
+
+    try:
+        payload = jwt.decode(body.token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+    except JWTError:
+        raise HTTPException(status_code=400, detail="Invalid or expired reset link")
+
+    if payload.get("purpose") != "password_reset":
+        raise HTTPException(status_code=400, detail="Invalid reset token")
+
+    user_id = int(payload["sub"])
+    result = await db.execute(select(User).where(User.user_id == user_id))
+    user = result.scalar_one_or_none()
+
+    if not user:
+        raise HTTPException(status_code=400, detail="Invalid reset token")
+
+    user.password_hash = hash_password(body.new_password)
+    await db.commit()
+
+    logger.info("[AUTH] Password reset for user_id=%s", user_id)
+    return {"detail": "Password has been reset successfully. You can now log in."}
 
 
 @router.post("/refresh")

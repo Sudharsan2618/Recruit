@@ -39,28 +39,26 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
   const router = useRouter()
   const { isAuthenticated, loading, user } = useAuth()
 
+  // Redirect to login if not authenticated (after loading finishes)
+  React.useEffect(() => {
+    if (loading || UNGUARDED_PATHS.includes(pathname)) return
+    if (!isAuthenticated) {
+      router.push("/student/login")
+    } else if (user && !user.onboarding_completed) {
+      router.push("/student/onboarding")
+    }
+  }, [loading, isAuthenticated, user, pathname, router])
+
   // Don't guard login, register, or onboarding pages
   if (UNGUARDED_PATHS.includes(pathname)) return <>{children}</>
 
-  // Show loading while restoring session
-  if (loading) {
+  // Show loading while restoring session, or while redirecting
+  if (loading || !isAuthenticated || (user && !user.onboarding_completed)) {
     return (
       <PortalShell portalName="Student Portal" navItems={studentNav} portalColor="bg-primary">
         <DashboardSkeleton />
       </PortalShell>
     )
-  }
-
-  // Redirect to login if not authenticated
-  if (!isAuthenticated) {
-    router.push("/student/login")
-    return null
-  }
-
-  // Redirect to onboarding if not completed
-  if (user && !user.onboarding_completed) {
-    router.push("/student/onboarding")
-    return null
   }
 
   return <>{children}</>

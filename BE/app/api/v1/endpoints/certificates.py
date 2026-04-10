@@ -368,7 +368,7 @@ async def view_certificate(
         <div class="corner corner-bl"></div>
         <div class="corner corner-br"></div>
 
-        <div class="logo">SkillBridge</div>
+        <div class="logo"><img src="public/logo.png" alt="SkillBridge Logo"></div>
         <div class="subtitle">Certificate</div>
         <div class="of-completion">of Completion</div>
 

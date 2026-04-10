@@ -3,6 +3,7 @@
 import { useState } from "react"
 import Link from "next/link"
 import { BookOpen, Briefcase, Users, ArrowRight, BarChart3, GraduationCap, Building2, CheckCircle, ShieldCheck, Menu, X } from "lucide-react"
+import { Logo } from "@/components/logo"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 
@@ -13,9 +14,7 @@ function Navbar() {
     <header className="sticky top-0 z-50 border-b border-border bg-card/80 backdrop-blur-md">
       <nav className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3 sm:px-6 sm:py-4">
         <Link href="/" className="flex items-center gap-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary sm:h-9 sm:w-9">
-            <GraduationCap className="h-4 w-4 text-primary-foreground sm:h-5 sm:w-5" />
-          </div>
+          <Logo size={36} />
           <span className="text-lg font-bold text-foreground sm:text-xl">SkillBridge</span>
         </Link>
         <div className="hidden items-center gap-8 md:flex">
@@ -238,9 +237,7 @@ function Footer() {
           {/* Brand */}
           <div className="col-span-2 md:col-span-1">
             <div className="flex items-center gap-2">
-              <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
-                <GraduationCap className="h-4 w-4 text-primary-foreground" />
-              </div>
+              <Logo size={32} />
               <span className="font-bold text-foreground">SkillBridge</span>
             </div>
             <p className="mt-3 text-sm leading-relaxed text-muted-foreground">

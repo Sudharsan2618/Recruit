@@ -191,6 +191,111 @@ class MatchingService:
 
         return results
 
+    async def batch_compute_skill_overlap(
+        self, student_ids: list[int], job_id: int,
+    ) -> dict[int, dict]:
+        """Compute skill overlap for multiple students against one job in 2 queries total."""
+        from collections import defaultdict
+
+        empty = {
+            "skill_score": None, "matched_skills": [], "missing_skills": [],
+            "total_skills": 0, "mandatory_matched": 0, "mandatory_total": 0,
+            "optional_matched": 0, "optional_total": 0,
+        }
+        if not student_ids:
+            return {}
+
+        # Query 1: All job skills for the single job
+        job_skills_q = await self.db.execute(
+            text("""
+                SELECT js.skill_id, s.name AS skill_name, js.is_mandatory, js.min_experience_years
+                FROM job_skills js
+                JOIN skills s ON s.skill_id = js.skill_id
+                WHERE js.job_id = :job_id
+                ORDER BY js.is_mandatory DESC, s.name
+            """),
+            {"job_id": job_id},
+        )
+        job_skills = job_skills_q.mappings().all()
+
+        if not job_skills:
+            return {sid: dict(empty) for sid in student_ids}
+
+        # Query 2: All student skills for ALL students at once
+        all_student_skills_q = await self.db.execute(
+            text("""
+                SELECT ss.student_id, ss.skill_id, s.name AS skill_name,
+                       ss.proficiency_level, ss.years_of_experience
+                FROM student_skills ss
+                JOIN skills s ON s.skill_id = ss.skill_id
+                WHERE ss.student_id = ANY(:sids)
+            """),
+            {"sids": student_ids},
+        )
+
+        skills_by_student: dict[int, dict] = defaultdict(dict)
+        for row in all_student_skills_q.mappings().all():
+            skills_by_student[row["student_id"]][row["skill_id"]] = {
+                "name": row["skill_name"],
+                "proficiency_level": row["proficiency_level"] or 0,
+                "years_of_experience": float(row["years_of_experience"] or 0),
+            }
+
+        # Compute overlap per student in Python (no more DB calls)
+        results: dict[int, dict] = {}
+        for sid in student_ids:
+            student_skill_map = skills_by_student.get(sid, {})
+            mandatory_total = mandatory_matched = 0
+            optional_total = optional_matched = 0
+            proficiency_bonus_count = 0
+            matched_skills = []
+            missing_skills = []
+
+            for js in job_skills:
+                is_mandatory = js["is_mandatory"]
+                if is_mandatory:
+                    mandatory_total += 1
+                else:
+                    optional_total += 1
+
+                if js["skill_id"] in student_skill_map:
+                    ss = student_skill_map[js["skill_id"]]
+                    if is_mandatory:
+                        mandatory_matched += 1
+                    else:
+                        optional_matched += 1
+                    min_exp = js["min_experience_years"] or 0
+                    if ss["proficiency_level"] >= 4 and ss["years_of_experience"] >= min_exp:
+                        proficiency_bonus_count += 1
+                    matched_skills.append(js["skill_name"])
+                else:
+                    missing_skills.append(js["skill_name"])
+
+            if mandatory_total > 0:
+                score = (
+                    0.7 * (mandatory_matched / mandatory_total)
+                    + 0.3 * (optional_matched / max(optional_total, 1))
+                    + 0.05 * proficiency_bonus_count
+                )
+            else:
+                total = mandatory_total + optional_total
+                matched = mandatory_matched + optional_matched
+                score = (matched / max(total, 1)) + 0.05 * proficiency_bonus_count
+            score = min(score, 1.0)
+
+            results[sid] = {
+                "skill_score": round(score, 4),
+                "matched_skills": matched_skills,
+                "missing_skills": missing_skills,
+                "total_skills": len(job_skills),
+                "mandatory_matched": mandatory_matched,
+                "mandatory_total": mandatory_total,
+                "optional_matched": optional_matched,
+                "optional_total": optional_total,
+            }
+
+        return results
+
     def _compute_experience_fit(
         self,
         student_exp: int,

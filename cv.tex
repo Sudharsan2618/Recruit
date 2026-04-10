@@ -1,0 +1,241 @@
+%-----------------------------------------------------------------------------------------------------------------------------------------------%
+%	The MIT License (MIT)
+%
+%	Copyright (c) 2021 Jitin Nair
+%
+%	Permission is hereby granted, free of charge, to any person obtaining a copy
+%	of this software and associated documentation files (the "Software"), to deal
+%	in the Software without restriction, including without limitation the rights
+%	to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+%	copies of the Software, and to permit persons to whom the Software is
+%	furnished to do so, subject to the following conditions:
+%	
+%	THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+%	IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+%	FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+%	AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+%	LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+%	OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+%	THE SOFTWARE.
+%	
+%
+%-----------------------------------------------------------------------------------------------------------------------------------------------%
+
+%----------------------------------------------------------------------------------------
+%	DOCUMENT DEFINITION
+%----------------------------------------------------------------------------------------
+
+% article class because we want to fully customize the page and not use a cv template
+\documentclass[a4paper,1pt]{article}
+
+%----------------------------------------------------------------------------------------
+%	FONT
+%----------------------------------------------------------------------------------------
+
+% % fontspec allows you to use TTF/OTF fonts directly
+% \usepackage{fontspec}
+% \defaultfontfeatures{Ligatures=TeX}
+
+% % modified for ShareLaTeX use
+% \setmainfont[
+% SmallCapsFont = Fontin-SmallCaps.otf,
+% BoldFont = Fontin-Bold.otf,
+% ItalicFont = Fontin-Italic.otf
+% ]
+% {Fontin.otf}
+
+%----------------------------------------------------------------------------------------
+%	PACKAGES
+%----------------------------------------------------------------------------------------
+\usepackage{url}
+\usepackage{parskip} 	
+
+%other packages for formatting
+\RequirePackage{color}
+\RequirePackage{graphicx}
+\usepackage[usenames,dvipsnames]{xcolor}
+\usepackage[scale=0.9]{geometry}
+
+%tabularx environment
+\usepackage{tabularx}
+
+%for lists within experience section
+\usepackage{enumitem}
+
+% centered version of 'X' col. type
+\newcolumntype{C}{>{\centering\arraybackslash}X} 
+
+%to prevent spillover of tabular into next pages
+\usepackage{supertabular}
+\usepackage{tabularx}
+\newlength{\fullcollw}
+\setlength{\fullcollw}{0.40\textwidth}
+
+%custom \section
+\usepackage{titlesec}				
+\usepackage{multicol}
+\usepackage{multirow}
+
+%CV Sections inspired by: 
+%http://stefano.italians.nl/archives/18
+\titleformat{\section}{\Large\scshape\raggedright}{}{0em}{}[\titlerule]
+\titlespacing{\section}{0pt}{8pt}{8pt}
+
+%for publications
+\usepackage[style=authoryear,sorting=ynt, maxbibnames=2]{biblatex}
+
+%Setup hyperref package, and colours for links
+\usepackage[unicode, draft=false]{hyperref}
+\definecolor{linkcolour}{rgb}{0,0.2,0.6}
+\hypersetup{colorlinks,breaklinks,urlcolor=linkcolour,linkcolor=linkcolour}
+\addbibresource{citations.bib}
+\setlength\bibitemsep{1em}
+
+%for social icons
+\usepackage{fontawesome5}
+
+%debug page outer frames
+%\usepackage{showframe}
+
+%----------------------------------------------------------------------------------------
+%	BEGIN DOCUMENT
+%----------------------------------------------------------------------------------------
+\begin{document}
+
+% non-numbered pages
+\pagestyle{empty} 
+
+%----------------------------------------------------------------------------------------
+%	TITLE
+%----------------------------------------------------------------------------------------
+
+\begin{tabularx}{\linewidth}{@{} C @{}}
+\Huge{Sudharsan D S} \\[5pt]
+Chennai, India \\[3pt]
+\raisebox{-0.05\height}\faMobile \ +91-8220266137 \ $|$ \ 
+\href{mailto:sudharsan2618@gmail.com}{\raisebox{-0.05\height}\faEnvelope \ sudharsan2618@gmail.com} \ $|$ \ 
+\href{https://www.linkedin.com/in/sudharsan-d-s-7667ab267/}{\raisebox{-0.05\height}\faLinkedin\ linkedin.com/in/sudharsan-d-s-7667ab267} \\[2pt]
+\href{https://github.com/Sudharsan2618}{\raisebox{-0.05\height}\faGithub\ github.com/Sudharsan2618} \ $|$ \ 
+\href{https://sudharsan2618.github.io/sudharsan-portfolio/}{\raisebox{-0.05\height}\faGlobe \ sudharsan.ai} \\
+\end{tabularx}
+
+%----------------------------------------------------------------------------------------
+%	PROFESSIONAL SUMMARY
+%----------------------------------------------------------------------------------------
+\section{Summary}
+\begin{tabularx}{\linewidth}{@{}X@{}}
+Generative AI Developer with 2+ years of experience building production-grade AI-driven applications, agentic workflow systems, and scalable Python backend services. Skilled in architecting multi-agent orchestration engines, RAG pipelines, and enterprise knowledge assistants using LangChain, LangGraph, and modern AI SDKs. Strong foundation in backend development with FastAPI, microservices design, and software architecture. Passionate about building AI-powered systems that drive measurable business outcomes.
+\end{tabularx}
+
+%----------------------------------------------------------------------------------------
+%	SKILLS
+%----------------------------------------------------------------------------------------
+\section{Skills}
+\begin{tabularx}{\linewidth}{@{}l X@{}}
+Programming &  \normalsize{Python, JavaScript, TypeScript.}\\
+AI / LLM &  \normalsize{Generative AI, LangChain, LangGraph, LangSmith, Knowledge Graphs, Vector Indexing.}\\
+AI Architecture &  \normalsize{RAG Pipelines, Multi-Agent Orchestration, Context Window Management, Prompt Engineering, LLM Guardrails, Token Cost Governance.}\\
+Backend &  \normalsize{FastAPI, Flask, SQLAlchemy, Pydantic, REST APIs, Microservices, WebSocket, MS Graph API.}\\
+Frontend &  \normalsize{React, Next.js, HTML, CSS, WebRTC, Server-Side Rendering.}\\
+Databases &  \normalsize{PostgreSQL, MongoDB, Neo4j, ChromaDB, MySQL, Pinecone, pgvector.}\\
+Cloud / DevOps &  \normalsize{AWS, GCP, Docker, Git, CI/CD.}\\
+Automation &  \normalsize{n8n, Power Apps, Selenium, Playwright, Pytest, Cypress.}\\
+\end{tabularx}
+
+%----------------------------------------------------------------------------------------
+%	WORK EXPERIENCE
+%----------------------------------------------------------------------------------------
+\section{Work Experience}
+
+\begin{tabularx}{\linewidth}{ @{}l r@{} }
+\textbf{AI Engineer} -- \textbf{TrustyBytes} \hfill Chennai, India \\
+& \hfill 04/2025 -- Present \\[3.75pt]
+\multicolumn{2}{@{}X@{}}{• Led the end-to-end architecture and development of an \textbf{Agentic AI workflow automation platform} for enterprise clients, orchestrating autonomous multi-channel communication across Outlook, Teams, and SharePoint — reducing manual follow-up effort by \textbf{40\%} and increasing response capture rates across campaigns.
+}  \\
+\multicolumn{2}{@{}X@{}}{• Developed and deployed a \textbf{multi-agent orchestration engine} with LangGraph, enabling stateful graph execution, human-in-the-loop interrupts, and webhook-driven resume flows — enabling non-technical stakeholders to oversee and control AI-driven business processes in production.
+}  \\
+\multicolumn{2}{@{}X@{}}{• Established production observability with LangSmith tracing, enforced cost governance for LLM usage, and containerized services with Docker for GCP Cloud Run deployment with CI/CD pipelines.
+}  \\
+\end{tabularx}
+
+\begin{tabularx}{\linewidth}{ @{}l r@{} }
+\textbf{Software Developer} -- \textbf{Conceptvines} \hfill Chennai, India \\
+& \hfill 01/2024 -- 03/2025 \\[3.75pt]
+\multicolumn{2}{@{}X@{}}{• Created and built an \textbf{Enterprise Knowledge Assistant} powered by RAG architecture, enabling internal teams to query unstructured documents (emails, PDFs, knowledge bases) with Generative AI — reducing mail review time by \textbf{60\%} and document search effort by \textbf{40\%}.
+}  \\
+\multicolumn{2}{@{}X@{}}{• Engineered a fingerprint-based document ingestion pipeline with automated de-duplication and incremental sync to vector stores, ensuring the knowledge base stayed current without manual intervention.
+}  \\
+\multicolumn{2}{@{}X@{}}{• Built and maintained core Python backend services using FastAPI and Flask, crafted PostgreSQL schemas with stored procedures and master table configurations, and integrated Graph databases (Neo4j) for relationship-aware data querying.
+}  \\
+\end{tabularx}
+
+%----------------------------------------------------------------------------------------
+%	PROJECTS
+%----------------------------------------------------------------------------------------
+\section{Projects}
+
+\begin{tabularx}{\linewidth}{ @{}l r@{} }
+\textbf{Agentic AI Driven Workflow Automation} \\[3.75pt]
+\multicolumn{2}{@{}X@{}}{
+• Architected and built a multi-agent orchestration system using LangGraph with stateful, interruptible graphs, PostgreSQL-backed checkpointing, and thread-level memory for persistent, resumable agentic workflows. }  \\
+\multicolumn{2}{@{}X@{}}{
+• Developed LLM-driven extraction pipelines with structured output parsing, snooze detection, and field mapping to autonomously process responses across Outlook, Teams, and SharePoint via MS Graph API. }  \\
+\multicolumn{2}{@{}X@{}}{
+• Engineered a human-in-the-loop control plane with graph interrupts, webhook-driven resume signals, and an escalation scheduler, enabling seamless oversight over autonomous multi-channel communication workflows. }  \\
+\multicolumn{2}{@{}X@{}}{
+• Delivered end-to-end observability with LangSmith for trace-level debugging of LLM calls, graph transitions, and tool invocations, ensuring production reliability across LLM-driven, graph-driven, and memory-driven execution layers. }  \\
+\end{tabularx}
+
+\begin{tabularx}{\linewidth}{ @{}l r@{} }
+\textbf{Gen AI Learning Management Platform} & \hfill \href{https://companion-lms.com/}{Link to Demo} \\[3.75pt]
+\multicolumn{2}{@{}X@{}}{
+• Architected and built a full-stack student learning platform with Auto Recruit and personalized AI-driven industry-ready skill assessments. }  \\
+\multicolumn{2}{@{}X@{}}{
+• Developed three \textbf{role-based} portals with a multi-modal course player, xAPI learning tracking, \textbf{Razorpay payments}, \textbf{Novu real-time notifications}, with a clean layered backend (FastAPI, SQLAlchemy, Pydantic) following Repository--Service--Controller pattern, backed by a polyglot persistence layer using PostgreSQL for relational data and MongoDB for learning analytics and xAPI-compliant event streaming.}  \\
+\multicolumn{2}{@{}X@{}}{
+• Containerized the backend with Docker for GCP Cloud Run, integrated GCP Cloud Storage for assets, and applied JWT auth with role-based refresh tokens, rate limiting, and an xAPI-compliant learning record store. }  \\
+\end{tabularx}
+
+\begin{tabularx}{\linewidth}{ @{}l r@{} }
+\textbf{Enterprise Knowledge Assistant Using RAG} \\[3.75pt]
+\multicolumn{2}{@{}X@{}}{
+• Architected a production RAG pipeline using Gemini File Search as the semantic retrieval layer, with a fingerprint-based document ingestion system that auto-syncs knowledge bases into vector stores with de-duplication and incremental updates. }  \\
+\multicolumn{2}{@{}X@{}}{
+• Enforced a multi-layered guardrail system to detect prompt injection, sensitive data exposure, and internal-data probing — ensuring zero leakage of system-internal data in production. }  \\
+\multicolumn{2}{@{}X@{}}{
+• Built end-to-end observability and cost governance with per-request token usage tracking, model-specific pricing computation, grounding metadata serialization, citation extraction with source attribution, and actionable call-to-action closers to drive user engagement. }  \\
+\end{tabularx}
+
+%----------------------------------------------------------------------------------------
+%	CERTIFICATIONS
+%----------------------------------------------------------------------------------------
+\section{Certifications}
+
+\begin{tabularx}{\linewidth}{ @{}l r@{} }
+\textbf{Agentic AI Professional -- LangChain Academy} & \hfill 
+\end{tabularx}
+
+\begin{tabularx}{\linewidth}{ @{}l r@{} }
+\textbf{Generative AI Professional -- Oracle Certified} & \hfill 
+\end{tabularx}
+
+\begin{tabularx}{\linewidth}{ @{}l r@{} }
+\textbf{AWS Cloud Practitioner -- Professional Certification} & \hfill 
+\end{tabularx}
+
+\begin{tabularx}{\linewidth}{ @{}l r@{} }
+\textbf{Graph Database Certified Professional -- Neo4j} & \hfill 
+\end{tabularx}
+
+%----------------------------------------------------------------------------------------
+%	EDUCATION
+%----------------------------------------------------------------------------------------
+\section{Education}
+\begin{tabularx}{\linewidth}{ @{}l r@{} }
+\textbf{B.Tech in Information Technology} -- \textbf{Mahendra Engineering College} \hfill Chennai, India \\
+& \hfill 08/2020 -- 05/2024 \\[3.75pt]
+\multicolumn{2}{@{}X@{}}{CGPA: 8.7 / 10.0}\\
+\end{tabularx}
+
+
+\end{document}

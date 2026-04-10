@@ -27,6 +27,14 @@ async def connect_mongodb() -> None:
     _client = AsyncIOMotorClient(
         settings.MONGODB_URL,
         serverSelectionTimeoutMS=5000,
+        maxPoolSize=20,
+        minPoolSize=2,
+        maxIdleTimeMS=45000,
+        retryWrites=True,
+        retryReads=True,
+        connectTimeoutMS=10000,
+        socketTimeoutMS=30000,
+        compressors="zstd,snappy,zlib",
     )
     _db = _client[settings.MONGODB_DB]
 

@@ -129,6 +129,37 @@ async def get_company_candidates(
     )
     rows = data_q.mappings().all()
 
+    # Batch-fetch skills + enrollment counts for all candidates (2 queries instead of 2*N)
+    candidate_sids = [r["student_id"] for r in rows]
+
+    from collections import defaultdict
+    skills_by_student: dict = defaultdict(list)
+    enroll_counts: dict = {}
+
+    if candidate_sids:
+        skills_q = await db.execute(
+            text("""
+                SELECT ss.student_id, sk.name
+                FROM student_skills ss
+                JOIN skills sk ON sk.skill_id = ss.skill_id
+                WHERE ss.student_id = ANY(:sids)
+            """),
+            {"sids": candidate_sids},
+        )
+        for s in skills_q.mappings().all():
+            skills_by_student[s["student_id"]].append(s["name"])
+
+        enroll_q = await db.execute(
+            text("""
+                SELECT student_id, COUNT(*) AS cnt
+                FROM enrollments
+                WHERE student_id = ANY(:sids)
+                GROUP BY student_id
+            """),
+            {"sids": candidate_sids},
+        )
+        enroll_counts = {r["student_id"]: r["cnt"] for r in enroll_q.mappings().all()}
+
     candidates = []
     for r in rows:
         c = dict(r)
@@ -136,18 +167,8 @@ async def get_company_candidates(
         c["expected_salary"] = float(c["expected_salary"]) if c["expected_salary"] else None
         c["admin_match_score"] = float(c["admin_match_score"]) if c["admin_match_score"] else None
         c["name"] = f"{r['first_name'] or ''} {r['last_name'] or ''}".strip()
-        # Get student skills
-        skills_q = await db.execute(
-            text("SELECT sk.name FROM student_skills ss JOIN skills sk ON sk.skill_id = ss.skill_id WHERE ss.student_id = :sid"),
-            {"sid": r["student_id"]},
-        )
-        c["skills"] = [s["name"] for s in skills_q.mappings().all()]
-        # Get enrolled courses count
-        courses_q = await db.execute(
-            text("SELECT COUNT(*) FROM enrollments WHERE student_id = :sid"),
-            {"sid": r["student_id"]},
-        )
-        c["courses_count"] = courses_q.scalar() or 0
+        c["skills"] = skills_by_student.get(r["student_id"], [])
+        c["courses_count"] = enroll_counts.get(r["student_id"], 0)
         candidates.append(c)
 
     return {"candidates": candidates, "total": total}

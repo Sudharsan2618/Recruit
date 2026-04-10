@@ -28,17 +28,31 @@ async def get_admin_dashboard(
 ):
     """Get aggregated admin dashboard metrics."""
     q = await db.execute(text("""
+        WITH student_c  AS (SELECT COUNT(*) AS v FROM students),
+             company_c  AS (SELECT COUNT(*) AS v FROM companies),
+             course_c   AS (SELECT COUNT(*) AS v FROM courses WHERE is_published = true),
+             job_c      AS (SELECT COUNT(*) AS v FROM jobs WHERE status = 'active'),
+             app_c      AS (
+                 SELECT COUNT(*) AS total,
+                        COUNT(*) FILTER (WHERE status = 'pending_admin_review') AS pending,
+                        COUNT(*) FILTER (WHERE status = 'forwarded_to_company') AS forwarded,
+                        COUNT(*) FILTER (WHERE status = 'hired') AS hired
+                 FROM applications
+             ),
+             enroll_c   AS (SELECT COUNT(*) AS v FROM enrollments),
+             new_user_c AS (SELECT COUNT(*) AS v FROM users WHERE created_at >= NOW() - INTERVAL '30 days')
         SELECT
-            (SELECT COUNT(*) FROM students) AS total_students,
-            (SELECT COUNT(*) FROM companies) AS total_companies,
-            (SELECT COUNT(*) FROM courses WHERE is_published = true) AS active_courses,
-            (SELECT COUNT(*) FROM jobs WHERE status = 'active') AS active_jobs,
-            (SELECT COUNT(*) FROM applications) AS total_applications,
-            (SELECT COUNT(*) FROM applications WHERE status = 'pending_admin_review') AS pending_review,
-            (SELECT COUNT(*) FROM applications WHERE status = 'forwarded_to_company') AS forwarded,
-            (SELECT COUNT(*) FROM applications WHERE status = 'hired') AS hired,
-            (SELECT COUNT(*) FROM enrollments) AS total_enrollments,
-            (SELECT COUNT(*) FROM users WHERE created_at >= NOW() - INTERVAL '30 days') AS new_users_30d
+            student_c.v  AS total_students,
+            company_c.v  AS total_companies,
+            course_c.v   AS active_courses,
+            job_c.v      AS active_jobs,
+            app_c.total  AS total_applications,
+            app_c.pending AS pending_review,
+            app_c.forwarded AS forwarded,
+            app_c.hired  AS hired,
+            enroll_c.v   AS total_enrollments,
+            new_user_c.v AS new_users_30d
+        FROM student_c, company_c, course_c, job_c, app_c, enroll_c, new_user_c
     """))
     row = q.mappings().first()
     return dict(row) if row else {}
@@ -400,6 +414,8 @@ async def toggle_course_publish(
     if not result.scalar():
         raise HTTPException(status_code=404, detail="Course not found")
     await db.commit()
+    from app.utils.cache import invalidate_course_caches
+    invalidate_course_caches()
     return {"success": True, "course_id": course_id, "is_published": publish}
 
 
@@ -417,6 +433,8 @@ async def delete_course(
     if not result.scalar():
         raise HTTPException(status_code=404, detail="Course not found")
     await db.commit()
+    from app.utils.cache import invalidate_course_caches
+    invalidate_course_caches()
     return {"success": True, "course_id": course_id}
 
 
@@ -614,20 +632,25 @@ async def get_job_applicants(
     if not rows:
         return {"applicants": [], "total": total, "job": {"job_id": job_row["job_id"], "title": job_row["title"]}}
 
-    # Use MatchingService for skill overlap computation
+    # Use MatchingService for skill overlap computation (batched — 2 queries total)
     svc = MatchingService(db)
     student_ids = [r["student_id"] for r in rows]
+    all_skill_data = await svc.batch_compute_skill_overlap(student_ids, job_id)
 
-    # Pre-compute skill overlap for all applicants at once (batch)
-    all_skill_data = {}
-    for r in rows:
-        sid = r["student_id"]
-        skill_results = await svc._compute_skill_overlap(sid, [job_id])
-        all_skill_data[sid] = skill_results.get(job_id, {
-            "skill_score": None, "matched_skills": [], "missing_skills": [],
-            "total_skills": 0, "mandatory_matched": 0, "mandatory_total": 0,
-            "optional_matched": 0, "optional_total": 0,
-        })
+    # Batch-fetch display skills for all students (1 query instead of N)
+    from collections import defaultdict
+    all_display_skills_q = await db.execute(
+        text("""
+            SELECT ss.student_id, sk.name
+            FROM student_skills ss
+            JOIN skills sk ON sk.skill_id = ss.skill_id
+            WHERE ss.student_id = ANY(:sids)
+        """),
+        {"sids": student_ids},
+    )
+    display_skills_by_student: dict = defaultdict(list)
+    for row_sk in all_display_skills_q.mappings().all():
+        display_skills_by_student[row_sk["student_id"]].append(row_sk["name"])
 
     applicants = []
     for r in rows:
@@ -669,16 +692,7 @@ async def get_job_applicants(
         app["admin_match_score"] = float(app["admin_match_score"]) if app["admin_match_score"] else None
         app["name"] = f"{r['first_name'] or ''} {r['last_name'] or ''}".strip()
 
-        # Get student skills (all of them, for display)
-        skills_q = await db.execute(
-            text("""
-                SELECT sk.name FROM student_skills ss
-                JOIN skills sk ON sk.skill_id = ss.skill_id
-                WHERE ss.student_id = :sid
-            """),
-            {"sid": sid},
-        )
-        app["skills"] = [s["name"] for s in skills_q.mappings().all()]
+        app["skills"] = display_skills_by_student.get(sid, [])
 
         # Remove internal fields not needed in response
         for key in ["experience_years", "preferred_job_types", "preferred_remote_types", "preferred_locations", "vector_score"]:

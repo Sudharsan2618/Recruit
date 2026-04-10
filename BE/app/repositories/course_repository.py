@@ -227,21 +227,29 @@ class CourseRepository:
         if not enrollment:
             return
 
-        course = await self.get_course_by_id(enrollment.course_id)
-        if not course:
-            return
-
-        total_lessons = sum(len(m.lessons) for m in course.modules)
+        # Lightweight count — avoids loading full course ORM tree
+        total_q = await self.db.execute(
+            select(func.count(Lesson.lesson_id))
+            .join(Module, Module.module_id == Lesson.module_id)
+            .where(Module.course_id == enrollment.course_id)
+        )
+        total_lessons = total_q.scalar() or 0
         if total_lessons == 0:
             return
 
-        progress_list = await self.get_all_progress(enrollment_id)
-        completed = sum(1 for p in progress_list if p.is_completed)
+        completed_q = await self.db.execute(
+            select(func.count())
+            .select_from(LessonProgress)
+            .where(
+                LessonProgress.enrollment_id == enrollment_id,
+                LessonProgress.is_completed == True,
+            )
+        )
+        completed = completed_q.scalar() or 0
 
         enrollment.progress_percentage = round((completed / total_lessons) * 100, 2)
         if enrollment.progress_percentage >= 100:
             enrollment.status = "completed"
-            from datetime import datetime
             enrollment.completed_at = utc_now()
         await self.db.flush()
 
@@ -269,9 +277,16 @@ class CourseRepository:
     # ── Categories ──
 
     async def get_categories(self) -> List[Category]:
+        from app.utils.cache import get_category_cache
+        cache = get_category_cache()
+        if "all" in cache:
+            return cache["all"]
+
         query = select(Category).where(Category.is_active == True).order_by(Category.display_order)
         result = await self.db.execute(query)
-        return list(result.scalars().all())
+        categories = list(result.scalars().all())
+        cache["all"] = categories
+        return categories
 
     async def get_all_student_materials(self, student_id: int):
         query = (

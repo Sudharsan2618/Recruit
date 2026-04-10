@@ -58,45 +58,48 @@ class TrackingService:
         """Record a single learning activity.
 
         Flow:
-          1. Insert into `learning_progress` (MongoDB)
-          2. Generate & store xAPI statement (MongoDB)
-          3. Update course engagement counters (async, best-effort)
+          1. Insert into `learning_progress` (MongoDB)  — awaited
+          2-5. xAPI, engagement, flashcard, notifications — fire-and-forget
         """
         now = to_bson_datetime(datetime.now(timezone.utc))
 
-        # 1. Build the learning_progress document
+        # 1. Build the learning_progress document (must await — we need the ID)
         lp_doc = strip_none(self._build_lp_document(event, now))
         insert_result = await self.lp_collection.insert_one(lp_doc)
         activity_id = str(insert_result.inserted_id)
 
-        # 2. Generate xAPI statement
-        xapi_stmt_id = await self.xapi.record_statement(event)
+        # 2-5. Fire-and-forget background tasks for non-critical work
+        import asyncio
+        asyncio.create_task(self._background_tracking(event, now))
 
-        # 3. Best-effort engagement update
+        return TrackActivityResponse(
+            success=True,
+            activity_id=activity_id,
+            xapi_statement_id=None,
+            message=f"Activity '{event.activity_type.value}' recorded",
+        )
+
+    async def _background_tracking(
+        self, event: TrackActivityRequest, now: datetime,
+    ) -> None:
+        """Run xAPI, engagement, flashcard, and notification updates in background."""
+        try:
+            await self.xapi.record_statement(event)
+        except Exception:
+            pass
         try:
             await self._update_engagement(event, now)
         except Exception:
-            pass  # Non-critical — engagement is pre-computed nightly anyway
-
-        # 4. Best-effort flashcard progress (SM-2 spaced repetition)
+            pass
         try:
             if event.activity_type == ActivityType.FLASHCARD_INTERACTION:
                 await self._update_flashcard_progress(event, now)
         except Exception:
             pass
-
-        # 5. Best-effort notification triggers
         try:
             await self._trigger_notifications(event)
         except Exception:
             pass
-
-        return TrackActivityResponse(
-            success=True,
-            activity_id=activity_id,
-            xapi_statement_id=xapi_stmt_id,
-            message=f"Activity '{event.activity_type.value}' recorded",
-        )
 
     # ──────────────────────────────────────────────────────────────────
     # 2.  Batch Activities
@@ -536,28 +539,30 @@ class TrackingService:
     ) -> None:
         """Create notification queue entries for important activities."""
         from app.services.notification_service import create_notification
-        from app.db.postgres import async_session_factory
-        from app.models.user import Student
-        from sqlalchemy import select
 
-        # Resolve user_id and email from student_id
-        user_id = None
+        # Use user_id from event if frontend passed it (avoids cross-region PG lookup)
+        user_id = getattr(event, "user_id", None)
         email = None
-        try:
-            from app.models.user import User
-            async with async_session_factory() as session:
-                q = await session.execute(
-                    select(Student.user_id, User.email)
-                    .join(User, User.user_id == Student.user_id)
-                    .where(Student.student_id == event.student_id)
-                )
-                row = q.first()
-                if row:
-                    user_id, email = row
-        except Exception as e:
-            import logging
-            logging.getLogger(__name__).warning(f"Could not resolve user_id/email for notification: {e}")
-            user_id = event.student_id
+
+        if not user_id:
+            # Fallback: resolve from PG (expensive — opens a new session)
+            try:
+                from app.db.postgres import async_session_factory
+                from app.models.user import Student, User
+                from sqlalchemy import select
+                async with async_session_factory() as session:
+                    q = await session.execute(
+                        select(Student.user_id, User.email)
+                        .join(User, User.user_id == Student.user_id)
+                        .where(Student.student_id == event.student_id)
+                    )
+                    row = q.first()
+                    if row:
+                        user_id, email = row
+            except Exception as e:
+                import logging
+                logging.getLogger(__name__).warning(f"Could not resolve user_id/email for notification: {e}")
+                user_id = event.student_id
 
         if not user_id:
             return

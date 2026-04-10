@@ -108,6 +108,7 @@ class TrackActivityRequest(BaseModel):
     lesson_id: Optional[int] = None
     activity_type: ActivityType
     session_id: Optional[str] = None
+    user_id: Optional[int] = None
     details: Optional[ActivityDetails] = None
     scorm_data: Optional[ScormData] = None
     device_info: Optional[DeviceInfo] = None

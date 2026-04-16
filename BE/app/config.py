@@ -51,6 +51,7 @@ class Settings(BaseSettings):
     GOOGLE_APPLICATION_CREDENTIALS: Optional[str] = os.getenv("GOOGLE_APPLICATION_CREDENTIALS")
     GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY")
     GEMINI_MODEL: str = os.getenv("GEMINI_MODEL")
+    COURSE_ASSET_PREFIX: str = os.getenv("COURSE_ASSET_PREFIX", "courses")
     # ── MongoDB (Learning Analytics & xAPI) ──
     MONGODB_URL: str = os.getenv("MONGODB_URL")
     MONGODB_DB: str = os.getenv("MONGODB_DB")

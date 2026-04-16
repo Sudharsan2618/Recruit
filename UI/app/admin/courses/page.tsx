@@ -1,13 +1,14 @@
 "use client"
 
 import { useState, useEffect, useCallback } from "react"
+import Link from "next/link"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Search, BookOpen, Users, Layers, Eye, EyeOff, Trash2, Loader2 } from "lucide-react"
+import { Search, BookOpen, Users, Layers, Eye, EyeOff, Trash2, Loader2, Plus, Pencil } from "lucide-react"
 import { getAdminCourses, toggleCoursePublish, deleteAdminCourse, type AdminCourse } from "@/lib/api"
 import { DashboardSkeleton } from "@/components/skeletons"
 import { TablePagination } from "@/components/table-pagination"
@@ -83,9 +84,14 @@ export default function CourseManagement() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="text-2xl font-bold text-foreground">Course Management</h1>
-        <p className="text-muted-foreground">Manage courses, publish/unpublish, and track enrollments.</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-foreground">Course Management</h1>
+          <p className="text-muted-foreground">Manage courses, publish/unpublish, and track enrollments.</p>
+        </div>
+        <Button asChild>
+          <Link href="/admin/courses/new"><Plus className="h-4 w-4 mr-1" /> Create Course</Link>
+        </Button>
       </div>
 
       {/* Summary cards */}
@@ -209,6 +215,11 @@ export default function CourseManagement() {
                         <Loader2 className="h-4 w-4 animate-spin ml-auto" />
                       ) : (
                         <div className="flex justify-end gap-1">
+                          <Button size="sm" variant="ghost" asChild>
+                            <Link href={`/admin/courses/${course.course_id}/edit`}>
+                              <Pencil className="h-3.5 w-3.5" />
+                            </Link>
+                          </Button>
                           <Button
                             size="sm"
                             variant="ghost"

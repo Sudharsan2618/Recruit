@@ -5,5 +5,6 @@ export * from './courses';
 export * from './jobs';
 export * from './payments';
 export * from './admin';
+export * from './admin-courses';
 export * from './notifications';
 export * from './tracking';

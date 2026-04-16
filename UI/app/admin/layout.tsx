@@ -15,12 +15,18 @@ import {
   Settings,
   UserCheck,
   Share2,
+  Layers,
+  Tag,
+  GraduationCap,
 } from "lucide-react"
 
 const adminNav = [
   { label: "Dashboard", href: "/admin", icon: LayoutDashboard },
   { label: "User Management", href: "/admin/users", icon: Users },
   { label: "Course Management", href: "/admin/courses", icon: BookOpen },
+  { label: "Categories", href: "/admin/categories", icon: Layers },
+  { label: "Skills", href: "/admin/skills", icon: Tag },
+  { label: "Instructors", href: "/admin/instructors", icon: GraduationCap },
   { label: "Job Matching Hub", href: "/admin/matching", icon: GitMerge },
   { label: "Mentor Management", href: "/admin/mentors", icon: UserCheck },
   { label: "Referrals & Placements", href: "/admin/referrals", icon: Share2 },

@@ -96,7 +96,7 @@ class SkillOut(BaseModel):
 class InstructorCreateRequest(BaseModel):
     first_name: str
     last_name: str
-    user_id: Optional[int] = None
+    user_id: Optional[int] = None  # If not provided, a user will be auto-created
     bio: Optional[str] = None
     headline: Optional[str] = None
     expertise_areas: Optional[str] = None

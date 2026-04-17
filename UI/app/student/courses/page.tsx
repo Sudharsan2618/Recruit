@@ -143,7 +143,7 @@ export default function CourseCatalog() {
 
             return (
               <Card key={course.id} className="group overflow-hidden transition-shadow hover:shadow-md">
-                <div className="relative h-40 bg-muted">
+                <div className="relative h-80 bg-muted">
                   {course.image ? (
                     <img src={course.image} alt={course.title} className="h-full w-full object-cover" />
                   ) : (

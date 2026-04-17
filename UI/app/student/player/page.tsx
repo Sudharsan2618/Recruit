@@ -131,6 +131,8 @@ function PdfViewer({ url, initialPage = 0, onProgressChange }: PdfViewerProps) {
   const progressCallbackRef = useRef(onProgressChange)
   progressCallbackRef.current = onProgressChange
 
+  console.log("[PdfViewer] MOUNT/RENDER — initialPage:", initialPage, "maxPageReachedRef:", maxPageReachedRef.current, "numPages:", numPages)
+
   // Responsive width
   useEffect(() => {
     function updateWidth() {
@@ -143,36 +145,38 @@ function PdfViewer({ url, initialPage = 0, onProgressChange }: PdfViewerProps) {
     return () => window.removeEventListener("resize", updateWidth)
   }, [])
 
-  // Determine current visible page from scroll position (reliable fallback for IntersectionObserver)
+  // Determine current visible page using getBoundingClientRect() against the real browser viewport.
+  // This avoids relying on container scroll position (which breaks when the container isn't height-constrained).
   const computeCurrentPage = useCallback(() => {
-    const container = containerRef.current
-    if (!container || numPages === 0) return
+    if (numPages === 0 || pageRefs.current.size === 0) return
 
-    // Only compute if at least some pages have refs (react-pdf loads pages asynchronously)
-    if (pageRefs.current.size < Math.max(1, Math.min(3, numPages / 2))) return
-
-    const scrollTop = container.scrollTop
-    const containerMid = scrollTop + container.clientHeight / 2
+    const viewportMid = window.innerHeight / 2
     let bestPage = 1
     let bestDist = Infinity
 
-    pageRefs.current.forEach((el, pageNum) => {
-      if (!el) return
-      const top = el.offsetTop
-      const mid = top + el.offsetHeight / 2
-      const dist = Math.abs(containerMid - mid)
+    for (let p = 1; p <= numPages; p++) {
+      const el = pageRefs.current.get(p)
+      if (!el) continue
+      const rect = el.getBoundingClientRect()
+      // Skip pages that are completely off-screen (optimization for large PDFs)
+      if (rect.bottom < -500 || rect.top > window.innerHeight + 500) continue
+      const elMid = rect.top + rect.height / 2
+      const dist = Math.abs(viewportMid - elMid)
       if (dist < bestDist) {
         bestDist = dist
-        bestPage = pageNum
+        bestPage = p
       }
-    })
+    }
 
-    // Guard against invalid page numbers
     if (bestPage < 1 || bestPage > numPages) bestPage = 1
+
+    console.log(`[PdfViewer] computeCurrentPage — viewportMid:${Math.round(viewportMid)} → bestPage:${bestPage} maxReached:${maxPageReachedRef.current}`)
+
     setCurrentPage(bestPage)
 
     // High-water mark — never goes down
     if (bestPage > maxPageReachedRef.current) {
+      console.log(`[PdfViewer] NEW MAX PAGE: ${maxPageReachedRef.current} → ${bestPage}`)
       maxPageReachedRef.current = bestPage
       setMaxPage(bestPage)
     }
@@ -187,20 +191,37 @@ function PdfViewer({ url, initialPage = 0, onProgressChange }: PdfViewerProps) {
     })
   }, [numPages])
 
-  // Attach scroll listener to track page as user reads
+  // Attach scroll listener to the actual scrolling ancestor (or window).
+  // The PdfViewer container may not scroll itself — the parent layout handles scrolling.
   useEffect(() => {
-    const container = containerRef.current
-    if (!container || numPages === 0) return
+    if (numPages === 0) return
 
-    // Compute once on mount / when pages load
-    const initTimer = setTimeout(computeCurrentPage, 500)
+    // Find the nearest scrollable ancestor of the container
+    let scrollTarget: HTMLElement | Window = window
+    let el = containerRef.current?.parentElement
+    while (el) {
+      const style = getComputedStyle(el)
+      const overflowY = style.overflowY
+      if ((overflowY === "auto" || overflowY === "scroll") && el.scrollHeight > el.clientHeight) {
+        scrollTarget = el
+        break
+      }
+      el = el.parentElement
+    }
+
+    console.log(`[PdfViewer] scroll listener attached to: ${scrollTarget === window ? "window" : (scrollTarget as HTMLElement).className.slice(0, 60)}`)
+
+    // Compute once the page divs are in the DOM
+    const initTimer1 = setTimeout(computeCurrentPage, 500)
+    const initTimer2 = setTimeout(computeCurrentPage, 1500)
 
     const handleScroll = () => { computeCurrentPage() }
-    container.addEventListener("scroll", handleScroll, { passive: true })
+    scrollTarget.addEventListener("scroll", handleScroll, { passive: true })
 
     return () => {
-      clearTimeout(initTimer)
-      container.removeEventListener("scroll", handleScroll)
+      clearTimeout(initTimer1)
+      clearTimeout(initTimer2)
+      scrollTarget.removeEventListener("scroll", handleScroll)
     }
   }, [numPages, computeCurrentPage])
 
@@ -225,6 +246,7 @@ function PdfViewer({ url, initialPage = 0, onProgressChange }: PdfViewerProps) {
   }, [numPages, initialPage])
 
   function onDocumentLoadSuccess({ numPages: n }: { numPages: number }) {
+    console.log(`[PdfViewer] onDocumentLoadSuccess — totalPages: ${n}, initialPage: ${initialPage}`)
     setNumPages(n)
     setIsLoading(false)
   }
@@ -834,6 +856,8 @@ export default function CoursePlayer() {
     const elapsed = Math.max(1, Math.round((Date.now() - pdfStartTimeRef.current) / 1000))
     const lessonId = currentLesson.lesson_id
 
+    console.log(`[PDF SAVE] lesson:${lessonId} page:${info.currentPage}/${info.totalPages} max:${info.maxPageReached} pct:${info.percentage}% elapsed:${elapsed}s`)
+
     // Save to PostgreSQL (progress_percentage + video_position_seconds as page bookmark)
     updateLessonProgress(user.student_id!, course.course_id, {
       lesson_id: lessonId,
@@ -889,8 +913,12 @@ export default function CoursePlayer() {
     const isFirstCall = !prev
     const timeSinceLastSave = Date.now() - pdfLastSavedRef.current
 
+    console.log(`[PDF PROGRESS] page:${info.currentPage}/${info.totalPages} max:${info.maxPageReached} pct:${info.percentage}% first:${isFirstCall} newMax:${isNewMax} sinceSave:${Math.round(timeSinceLastSave/1000)}s`)
+
     // Save if: first call, new max page reached, or periodic fallback (every 15s)
     if (!isFirstCall && !isNewMax && timeSinceLastSave < 15000) return
+
+    console.log(`[PDF PROGRESS] → WILL SAVE (first:${isFirstCall} newMax:${isNewMax} periodic:${timeSinceLastSave >= 15000})`)
 
     // Debounce: wait 2s after scrolling stops before saving
     if (pdfProgressTimerRef.current) clearTimeout(pdfProgressTimerRef.current)
@@ -1136,7 +1164,15 @@ export default function CoursePlayer() {
   }
 
   const totalLessons = course.modules.flatMap((m) => m.lessons).length
-  const progressPercent = totalLessons > 0 ? Math.round((completedLessons.size / totalLessons) * 100) : 0
+  // Overall progress: sum each lesson's individual progress (completed = 100%, partial = its %)
+  const progressPercent = totalLessons > 0 ? Math.round(
+    course.modules.flatMap((m) => m.lessons).reduce((sum, lesson) => {
+      if (completedLessons.has(lesson.lesson_id)) return sum + 100
+      const lp = lessonProgressMap[lesson.lesson_id]
+      if (lp) return sum + Math.min(100, Number(lp.progress_percentage) || 0)
+      return sum
+    }, 0) / totalLessons
+  ) : 0
   const allLessons = course.modules.flatMap((m) => m.lessons)
   const currentIndex = currentLesson ? allLessons.findIndex((l) => l.lesson_id === currentLesson.lesson_id) : -1
   const isFirst = currentIndex <= 0
@@ -1492,6 +1528,7 @@ export default function CoursePlayer() {
 
                         {isPdf ? (
                           <PdfViewer
+                            key={`pdf-${currentLesson.lesson_id}`}
                             url={url}
                             initialPage={currentLesson ? (lessonProgressMap[currentLesson.lesson_id]?.video_position_seconds || 0) : 0}
                             onProgressChange={handlePdfProgress}

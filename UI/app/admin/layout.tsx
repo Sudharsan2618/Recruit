@@ -1,6 +1,6 @@
 "use client"
 
-import React from "react"
+import React, { useEffect } from "react"
 import { usePathname, useRouter } from "next/navigation"
 
 import { AuthProvider, useAuth } from "@/lib/auth-context"
@@ -41,6 +41,13 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
   const router = useRouter()
   const { isAuthenticated, loading, user } = useAuth()
 
+  useEffect(() => {
+    if (UNGUARDED_PATHS.includes(pathname)) return
+    if (!loading && (!isAuthenticated || user?.user_type !== "admin")) {
+      router.push("/admin/login")
+    }
+  }, [isAuthenticated, loading, user, pathname, router])
+
   if (UNGUARDED_PATHS.includes(pathname)) return <>{children}</>
 
   if (loading) {
@@ -52,7 +59,6 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
   }
 
   if (!isAuthenticated || user?.user_type !== "admin") {
-    router.push("/admin/login")
     return null
   }
 

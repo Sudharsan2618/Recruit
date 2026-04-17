@@ -209,7 +209,34 @@ async def create_instructor(
     admin: dict = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    user_id = body.user_id or 0
+    # If user_id is not provided, auto-create a user first
+    user_id = body.user_id
+    if user_id is None:
+        # Generate a temporary email based on name
+        temp_email = f"{body.first_name.lower()}.{body.last_name.lower()}@temp.instructor"
+        # Check if this email already exists
+        existing_user = await db.execute(text("SELECT user_id FROM users WHERE email = :email"), {"email": temp_email})
+        if existing_user.scalar_one_or_none():
+            # User already exists, use their user_id
+            user_id = existing_user.scalar_one()
+        else:
+            # Create a new user (only fields that exist in the users table)
+            result = await db.execute(text("""
+                INSERT INTO users (email, password_hash, user_type, status, created_at, updated_at)
+                VALUES (:email, :password_hash, 'instructor', 'active', :now, :now)
+                RETURNING user_id
+            """), {
+                "email": temp_email,
+                "password_hash": "",  # Empty password for now
+                "now": utc_now(),
+            })
+            user_id = result.scalar_one()
+    else:
+        # Verify the provided user exists
+        user_check = await db.execute(text("SELECT user_id FROM users WHERE user_id = :user_id"), {"user_id": user_id})
+        if user_check.scalar_one_or_none() is None:
+            raise HTTPException(status_code=400, detail=f"User with user_id={user_id} does not exist")
+
     result = await db.execute(text("""
         INSERT INTO instructors (user_id, first_name, last_name, bio, headline,
             expertise_areas, profile_picture_url, is_active, created_at, updated_at)

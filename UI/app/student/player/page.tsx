@@ -82,7 +82,7 @@ import { Document, Page, pdfjs } from "react-pdf"
 import "react-pdf/dist/Page/AnnotationLayer.css"
 import "react-pdf/dist/Page/TextLayer.css"
 
-pdfjs.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.mjs`
+pdfjs.GlobalWorkerOptions.workerSrc = `/pdf.worker.min.mjs`
 
 const contentTypeIcons: Record<string, React.ElementType> = {
   video: Video,
@@ -111,13 +111,27 @@ function totalUniqueSeconds(ranges: [number, number][]): number {
   return mergeRanges(ranges).reduce((sum, [s, e]) => sum + (e - s), 0)
 }
 
-// ── Native PDF Viewer Component ──
-function PdfViewer({ url }: { url: string }) {
+// ── Native PDF Viewer Component (with progress tracking + auto-scroll) ──
+interface PdfViewerProps {
+  url: string
+  initialPage?: number          // 1-indexed page to auto-scroll to on load
+  onProgressChange?: (info: { currentPage: number; totalPages: number; percentage: number; maxPageReached: number }) => void
+}
+
+function PdfViewer({ url, initialPage = 0, onProgressChange }: PdfViewerProps) {
   const [numPages, setNumPages] = useState<number>(0)
   const [pageWidth, setPageWidth] = useState<number>(600)
   const [isLoading, setIsLoading] = useState(true)
+  const [currentPage, setCurrentPage] = useState<number>(1)
+  const [maxPage, setMaxPage] = useState<number>(initialPage || 1)
   const containerRef = useRef<HTMLDivElement>(null)
+  const pageRefs = useRef<Map<number, HTMLDivElement>>(new Map())
+  const maxPageReachedRef = useRef<number>(initialPage || 1)
+  const hasScrolledToInitial = useRef(false)
+  const progressCallbackRef = useRef(onProgressChange)
+  progressCallbackRef.current = onProgressChange
 
+  // Responsive width
   useEffect(() => {
     function updateWidth() {
       if (containerRef.current) {
@@ -129,10 +143,98 @@ function PdfViewer({ url }: { url: string }) {
     return () => window.removeEventListener("resize", updateWidth)
   }, [])
 
+  // Determine current visible page from scroll position (reliable fallback for IntersectionObserver)
+  const computeCurrentPage = useCallback(() => {
+    const container = containerRef.current
+    if (!container || numPages === 0) return
+
+    // Only compute if at least some pages have refs (react-pdf loads pages asynchronously)
+    if (pageRefs.current.size < Math.max(1, Math.min(3, numPages / 2))) return
+
+    const scrollTop = container.scrollTop
+    const containerMid = scrollTop + container.clientHeight / 2
+    let bestPage = 1
+    let bestDist = Infinity
+
+    pageRefs.current.forEach((el, pageNum) => {
+      if (!el) return
+      const top = el.offsetTop
+      const mid = top + el.offsetHeight / 2
+      const dist = Math.abs(containerMid - mid)
+      if (dist < bestDist) {
+        bestDist = dist
+        bestPage = pageNum
+      }
+    })
+
+    // Guard against invalid page numbers
+    if (bestPage < 1 || bestPage > numPages) bestPage = 1
+    setCurrentPage(bestPage)
+
+    // High-water mark — never goes down
+    if (bestPage > maxPageReachedRef.current) {
+      maxPageReachedRef.current = bestPage
+      setMaxPage(bestPage)
+    }
+
+    // Report progress
+    const pct = Math.min(100, Math.round((maxPageReachedRef.current / numPages) * 100))
+    progressCallbackRef.current?.({
+      currentPage: bestPage,
+      totalPages: numPages,
+      percentage: pct,
+      maxPageReached: maxPageReachedRef.current,
+    })
+  }, [numPages])
+
+  // Attach scroll listener to track page as user reads
+  useEffect(() => {
+    const container = containerRef.current
+    if (!container || numPages === 0) return
+
+    // Compute once on mount / when pages load
+    const initTimer = setTimeout(computeCurrentPage, 500)
+
+    const handleScroll = () => { computeCurrentPage() }
+    container.addEventListener("scroll", handleScroll, { passive: true })
+
+    return () => {
+      clearTimeout(initTimer)
+      container.removeEventListener("scroll", handleScroll)
+    }
+  }, [numPages, computeCurrentPage])
+
+  // Auto-scroll to the initial page after document loads
+  useEffect(() => {
+    if (numPages === 0 || hasScrolledToInitial.current) return
+    const targetPage = initialPage && initialPage > 1 ? initialPage : 0
+    if (targetPage < 2) { hasScrolledToInitial.current = true; return }
+
+    // Delay to ensure react-pdf Page components have rendered at full height
+    const timer = setTimeout(() => {
+      const el = pageRefs.current.get(targetPage)
+      if (el && containerRef.current) {
+        el.scrollIntoView({ behavior: "smooth", block: "start" })
+        maxPageReachedRef.current = Math.max(maxPageReachedRef.current, targetPage)
+        setMaxPage(maxPageReachedRef.current)
+      }
+      hasScrolledToInitial.current = true
+    }, 800)
+
+    return () => clearTimeout(timer)
+  }, [numPages, initialPage])
+
   function onDocumentLoadSuccess({ numPages: n }: { numPages: number }) {
     setNumPages(n)
     setIsLoading(false)
   }
+
+  function setPageRef(pageNum: number, el: HTMLDivElement | null) {
+    if (el) pageRefs.current.set(pageNum, el)
+    else pageRefs.current.delete(pageNum)
+  }
+
+  const pct = numPages > 0 ? Math.min(100, Math.round((maxPage / numPages) * 100)) : 0
 
   return (
     <div 
@@ -187,7 +289,13 @@ function PdfViewer({ url }: { url: string }) {
         }
       >
         {Array.from(new Array(numPages), (_, index) => (
-          <div key={`page_${index + 1}`} className="mb-3 mx-auto shadow-md rounded-lg overflow-hidden bg-white" style={{ maxWidth: pageWidth }}>
+          <div
+            key={`page_${index + 1}`}
+            ref={(el) => setPageRef(index + 1, el)}
+            data-page={index + 1}
+            className="mb-3 mx-auto shadow-md rounded-lg overflow-hidden bg-white"
+            style={{ maxWidth: pageWidth }}
+          >
             <Page
               pageNumber={index + 1}
               width={pageWidth}
@@ -203,7 +311,18 @@ function PdfViewer({ url }: { url: string }) {
         ))}
       </Document>
       {numPages > 0 && (
-        <p className="text-center text-xs text-muted-foreground mt-2">{numPages} page{numPages !== 1 ? "s" : ""}</p>
+        <div className="sticky bottom-2 flex items-center justify-center gap-3 mt-2 z-20">
+          <div className="flex items-center gap-2 rounded-full bg-background/90 backdrop-blur border border-border px-3 py-1.5 shadow-sm">
+            <span className="text-xs font-medium text-foreground">Page {currentPage} / {numPages}</span>
+            <div className="w-20 h-1.5 bg-muted rounded-full overflow-hidden">
+              <div
+                className="h-full bg-primary rounded-full transition-all duration-300"
+                style={{ width: `${pct}%` }}
+              />
+            </div>
+            <span className="text-[10px] text-muted-foreground">{pct}%</span>
+          </div>
+        </div>
       )}
     </div>
   )
@@ -692,24 +811,121 @@ export default function CoursePlayer() {
     }
   }, [completedLessons, course, user, sessionId, lessonProgressMap])
 
-  // ── PDF/PPT/Document auto-complete after 5 seconds ──
+  // ── PDF progress tracking (scroll-based) ──
+  const pdfProgressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const pdfProgressRef = useRef<{ currentPage: number; totalPages: number; percentage: number; maxPageReached: number } | null>(null)
+  const pdfStartTimeRef = useRef<number>(0)
+
+  // Reset PDF timer when lesson changes
   useEffect(() => {
+    if (currentLesson?.content_type === "pdf") {
+      pdfStartTimeRef.current = Date.now()
+      pdfProgressRef.current = null
+    }
+    return () => {
+      if (pdfProgressTimerRef.current) clearTimeout(pdfProgressTimerRef.current)
+    }
+  }, [currentLesson?.lesson_id])
+
+  const pdfLastSavedRef = useRef<number>(0) // timestamp of last save
+
+  const savePdfProgressNow = useCallback((info: { currentPage: number; totalPages: number; percentage: number; maxPageReached: number }) => {
+    if (!currentLesson || !user?.student_id || !course) return
+    const elapsed = Math.max(1, Math.round((Date.now() - pdfStartTimeRef.current) / 1000))
+    const lessonId = currentLesson.lesson_id
+
+    // Save to PostgreSQL (progress_percentage + video_position_seconds as page bookmark)
+    updateLessonProgress(user.student_id!, course.course_id, {
+      lesson_id: lessonId,
+      progress_percentage: info.percentage,
+      video_position_seconds: info.maxPageReached,
+      time_spent_seconds: elapsed,
+      is_completed: false,
+    }).then(() => {
+      setLessonProgressMap(prev => ({
+        ...prev,
+        [lessonId]: {
+          ...prev[lessonId],
+          progress_percentage: String(info.percentage),
+          video_position_seconds: info.maxPageReached,
+          time_spent_seconds: (prev[lessonId]?.time_spent_seconds || 0) + elapsed,
+        } as any
+      }))
+      pdfStartTimeRef.current = Date.now()
+      pdfLastSavedRef.current = Date.now()
+    }).catch(console.warn)
+
+    // Track to MongoDB for analytics
+    trackActivity({
+      student_id: user.student_id!,
+      course_id: course.course_id,
+      lesson_id: lessonId,
+      activity_type: "document_viewed",
+      session_id: sessionId || undefined,
+      details: {
+        document: { url: currentLesson.content_url || "", type: "pdf" },
+        scroll_depth_percentage: info.percentage,
+        time_spent_seconds: elapsed,
+      },
+    }).catch(console.warn)
+
+    // Auto-complete at >=90% read
+    if (info.percentage >= 90 && !completedLessons.has(lessonId)) {
+      markLessonCompleted(lessonId, {
+        progress_percentage: info.percentage,
+        time_spent_seconds: elapsed,
+      })
+    }
+  }, [currentLesson, user?.student_id, course, sessionId, completedLessons, markLessonCompleted])
+
+  const handlePdfProgress = useCallback((info: { currentPage: number; totalPages: number; percentage: number; maxPageReached: number }) => {
     if (!currentLesson || !user?.student_id || !course) return
     if (currentLesson.content_type !== "pdf") return
-    if (completedLessons.has(currentLesson.lesson_id)) return
 
-    const lessonId = currentLesson.lesson_id
-    const timer = setTimeout(() => {
-      markLessonCompleted(lessonId, { time_spent_seconds: 5 })
-    }, 5000)
+    const prev = pdfProgressRef.current
+    pdfProgressRef.current = info
 
-    return () => clearTimeout(timer)
-  }, [currentLesson?.lesson_id, currentLesson?.content_type, user?.student_id, course?.course_id, completedLessons, markLessonCompleted])
+    const isNewMax = info.maxPageReached > (prev?.maxPageReached || 0)
+    const isFirstCall = !prev
+    const timeSinceLastSave = Date.now() - pdfLastSavedRef.current
+
+    // Save if: first call, new max page reached, or periodic fallback (every 15s)
+    if (!isFirstCall && !isNewMax && timeSinceLastSave < 15000) return
+
+    // Debounce: wait 2s after scrolling stops before saving
+    if (pdfProgressTimerRef.current) clearTimeout(pdfProgressTimerRef.current)
+    pdfProgressTimerRef.current = setTimeout(() => {
+      savePdfProgressNow(info)
+    }, isFirstCall ? 1000 : 2000)
+  }, [currentLesson, user?.student_id, course, savePdfProgressNow])
 
   // ── Save progress on tab close / refresh / navigate away ──
+  const flushPdfProgress = useCallback(() => {
+    const info = pdfProgressRef.current
+    if (!info || !currentLesson || currentLesson.content_type !== "pdf" || !user?.student_id || !course) return
+    const elapsed = Math.round((Date.now() - pdfStartTimeRef.current) / 1000)
+    // Use sendBeacon for reliable fire-and-forget on unload
+    const token = typeof window !== "undefined" ? localStorage.getItem("auth_token") : null
+    const apiBase = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080/api/v1"
+    const body = JSON.stringify({
+      lesson_id: currentLesson.lesson_id,
+      progress_percentage: info.percentage,
+      video_position_seconds: info.maxPageReached,
+      time_spent_seconds: elapsed,
+      is_completed: info.percentage >= 90,
+    })
+    const url = `${apiBase}/students/enrollments/${course.course_id}/progress?student_id=${user.student_id}`
+    try {
+      const blob = new Blob([body], { type: "application/json" })
+      // sendBeacon doesn't support auth headers, fall back to sync fetch
+      fetch(url, { method: "POST", headers: { "Content-Type": "application/json", ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body, keepalive: true }).catch(() => {})
+    } catch {}
+  }, [currentLesson, user?.student_id, course])
+
   useEffect(() => {
     function handleBeforeUnload() {
       flushVideoProgress()
+      flushPdfProgress()
     }
     window.addEventListener('beforeunload', handleBeforeUnload)
     window.addEventListener('pagehide', handleBeforeUnload)
@@ -717,7 +933,7 @@ export default function CoursePlayer() {
       window.removeEventListener('beforeunload', handleBeforeUnload)
       window.removeEventListener('pagehide', handleBeforeUnload)
     }
-  }, [flushVideoProgress])
+  }, [flushVideoProgress, flushPdfProgress])
 
   // Save note handler
   function handleSaveNote() {
@@ -779,17 +995,6 @@ export default function CoursePlayer() {
           session_id: sessionId || undefined
         }).catch(console.warn)
 
-        // Track document_viewed for PDF lessons
-        if (lesson.content_type === "pdf") {
-          trackActivity({
-            student_id: user.student_id,
-            course_id: activeCourse.course_id,
-            lesson_id: lesson.lesson_id,
-            activity_type: "document_viewed",
-            session_id: sessionId || undefined,
-            details: { document: { url: lesson.content_url || "", type: "pdf" } }
-          }).catch(console.warn)
-        }
       }
       
       if (lesson.content_type === "quiz" && lesson.quiz_id) {
@@ -1286,7 +1491,11 @@ export default function CoursePlayer() {
                         </div>
 
                         {isPdf ? (
-                          <PdfViewer url={url} />
+                          <PdfViewer
+                            url={url}
+                            initialPage={currentLesson ? (lessonProgressMap[currentLesson.lesson_id]?.video_position_seconds || 0) : 0}
+                            onProgressChange={handlePdfProgress}
+                          />
                         ) : isOfficeDoc ? (
                           <div className="flex-1 flex flex-col relative min-h-[500px]">
                             <iframe

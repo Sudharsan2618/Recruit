@@ -431,7 +431,17 @@ export default function CourseDetailPage() {
 
         {/* Sidebar — Enrollment Card */}
         <div className="lg:col-span-1">
-          <Card className="sticky top-6">
+          <Card className="sticky top-6 overflow-hidden">
+            {/* Thumbnail */}
+            {course.thumbnail_url ? (
+              <div className="relative w-full bg-muted">
+                <img
+                  src={course.thumbnail_url}
+                  alt={course.title}
+                  className="h-full w-full object-cover"
+                />
+              </div>
+            ) : null}
             <CardContent className="flex flex-col gap-4 p-6">
               {/* Price */}
               <div className="text-center">

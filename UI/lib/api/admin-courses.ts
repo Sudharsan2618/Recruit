@@ -81,6 +81,7 @@ export interface SkillItem {
 
 export interface InstructorItem {
   instructor_id: number
+  user_id?: number
   first_name: string
   last_name: string
   bio?: string | null

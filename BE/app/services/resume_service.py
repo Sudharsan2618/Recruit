@@ -138,3 +138,15 @@ async def get_resume_analysis(student_id: int) -> Optional[dict]:
         {"_id": 0},
     )
     return doc
+
+
+async def backfill_resume_text(student_id: int, resume_text: str) -> None:
+    """Persist resume_text onto an existing analysis doc that predates text storage."""
+    db = get_mongodb()
+    await db["resume_analysis"].update_one(
+        {"student_id": student_id},
+        {"$set": {
+            "resume_text": resume_text[:20000],
+            "resume_text_length": len(resume_text),
+        }},
+    )

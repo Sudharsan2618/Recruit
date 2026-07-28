@@ -400,14 +400,37 @@ async def score_resume_endpoint(
 ):
     try:
         # 1. Load the stored resume text (persisted on upload)
-        from app.services.resume_service import get_resume_analysis
+        from app.services.resume_service import (
+            get_resume_analysis, extract_text_from_pdf, backfill_resume_text,
+        )
         analysis = await get_resume_analysis(student_id)
         resume_text = (analysis or {}).get("resume_text")
+
+        # Fallback: analyses created before resume_text was persisted still have
+        # a file_url — re-download the PDF, re-extract, and backfill for next time.
+        if not resume_text and analysis and analysis.get("file_url"):
+            try:
+                from app.services.storage_service import download_resume_bytes
+                file_bytes = download_resume_bytes(analysis["file_url"])
+                if file_bytes:
+                    extracted = extract_text_from_pdf(file_bytes)
+                    if extracted.strip():
+                        resume_text = extracted
+                        await backfill_resume_text(student_id, extracted)
+            except Exception as backfill_err:
+                import logging
+                logging.getLogger(__name__).warning(
+                    f"Resume text backfill failed for student {student_id}: {backfill_err}"
+                )
+
         if not resume_text:
-            raise HTTPException(
-                status_code=400,
-                detail="No resume on file. Upload and analyze a resume first.",
+            has_file = bool(analysis and analysis.get("file_url"))
+            detail = (
+                "Couldn't read the text from your saved resume. Please re-upload your resume."
+                if has_file else
+                "No resume on file. Upload and analyze a resume first."
             )
+            raise HTTPException(status_code=400, detail=detail)
 
         # 2. Build the target context (a Job on the board, or a manual role)
         from app.services.resume_score_service import (

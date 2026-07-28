@@ -6,10 +6,10 @@ import remarkGfm from "remark-gfm"
 const CodePlayground = dynamic(() => import("@/components/code-editor/CodePlayground"), {
   ssr: false,
   loading: () => (
-    <div className="flex items-center justify-center py-12 bg-slate-950 rounded-xl border border-slate-800/60">
+    <div className="flex items-center justify-center py-12 bg-sidebar rounded-xl border border-sidebar-border">
       <div className="flex flex-col items-center gap-2">
-        <div className="h-6 w-6 border-2 border-emerald-500/30 border-t-emerald-500 rounded-full animate-spin" />
-        <p className="text-xs text-slate-500">Loading Code Editor...</p>
+        <div className="h-6 w-6 border-2 border-primary-bright/30 border-t-primary-bright rounded-full animate-spin" />
+        <p className="text-xs text-sidebar-foreground/50">Loading code editor…</p>
       </div>
     </div>
   ),
@@ -131,7 +131,6 @@ function PdfViewer({ url, initialPage = 0, onProgressChange }: PdfViewerProps) {
   const progressCallbackRef = useRef(onProgressChange)
   progressCallbackRef.current = onProgressChange
 
-  console.log("[PdfViewer] MOUNT/RENDER — initialPage:", initialPage, "maxPageReachedRef:", maxPageReachedRef.current, "numPages:", numPages)
 
   // Responsive width
   useEffect(() => {
@@ -170,13 +169,11 @@ function PdfViewer({ url, initialPage = 0, onProgressChange }: PdfViewerProps) {
 
     if (bestPage < 1 || bestPage > numPages) bestPage = 1
 
-    console.log(`[PdfViewer] computeCurrentPage — viewportMid:${Math.round(viewportMid)} → bestPage:${bestPage} maxReached:${maxPageReachedRef.current}`)
 
     setCurrentPage(bestPage)
 
     // High-water mark — never goes down
     if (bestPage > maxPageReachedRef.current) {
-      console.log(`[PdfViewer] NEW MAX PAGE: ${maxPageReachedRef.current} → ${bestPage}`)
       maxPageReachedRef.current = bestPage
       setMaxPage(bestPage)
     }
@@ -209,7 +206,6 @@ function PdfViewer({ url, initialPage = 0, onProgressChange }: PdfViewerProps) {
       el = el.parentElement
     }
 
-    console.log(`[PdfViewer] scroll listener attached to: ${scrollTarget === window ? "window" : (scrollTarget as HTMLElement).className.slice(0, 60)}`)
 
     // Compute once the page divs are in the DOM
     const initTimer1 = setTimeout(computeCurrentPage, 500)
@@ -246,7 +242,6 @@ function PdfViewer({ url, initialPage = 0, onProgressChange }: PdfViewerProps) {
   }, [numPages, initialPage])
 
   function onDocumentLoadSuccess({ numPages: n }: { numPages: number }) {
-    console.log(`[PdfViewer] onDocumentLoadSuccess — totalPages: ${n}, initialPage: ${initialPage}`)
     setNumPages(n)
     setIsLoading(false)
   }
@@ -856,7 +851,6 @@ export default function CoursePlayer() {
     const elapsed = Math.max(1, Math.round((Date.now() - pdfStartTimeRef.current) / 1000))
     const lessonId = currentLesson.lesson_id
 
-    console.log(`[PDF SAVE] lesson:${lessonId} page:${info.currentPage}/${info.totalPages} max:${info.maxPageReached} pct:${info.percentage}% elapsed:${elapsed}s`)
 
     // Save to PostgreSQL (progress_percentage + video_position_seconds as page bookmark)
     updateLessonProgress(user.student_id!, course.course_id, {
@@ -913,12 +907,10 @@ export default function CoursePlayer() {
     const isFirstCall = !prev
     const timeSinceLastSave = Date.now() - pdfLastSavedRef.current
 
-    console.log(`[PDF PROGRESS] page:${info.currentPage}/${info.totalPages} max:${info.maxPageReached} pct:${info.percentage}% first:${isFirstCall} newMax:${isNewMax} sinceSave:${Math.round(timeSinceLastSave/1000)}s`)
 
     // Save if: first call, new max page reached, or periodic fallback (every 15s)
     if (!isFirstCall && !isNewMax && timeSinceLastSave < 15000) return
 
-    console.log(`[PDF PROGRESS] → WILL SAVE (first:${isFirstCall} newMax:${isNewMax} periodic:${timeSinceLastSave >= 15000})`)
 
     // Debounce: wait 2s after scrolling stops before saving
     if (pdfProgressTimerRef.current) clearTimeout(pdfProgressTimerRef.current)
@@ -1184,7 +1176,7 @@ export default function CoursePlayer() {
   return (
     <div className="flex h-screen flex-col bg-background">
       {/* Top bar - Professional Header */}
-      <header className="flex h-[56px] items-center gap-3 border-b border-border/60 bg-white/80 dark:bg-slate-950/80 backdrop-blur-xl px-4 shrink-0 z-20 sm:h-[60px] sm:gap-4 sm:px-6">
+      <header className="flex h-[56px] items-center gap-3 border-b border-border/60 bg-white/80 dark:bg-sidebar/80 backdrop-blur-xl px-4 shrink-0 z-20 sm:h-[60px] sm:gap-4 sm:px-6">
         <Button 
           variant="ghost" 
           size="icon" 
@@ -1195,15 +1187,15 @@ export default function CoursePlayer() {
         </Button>
         <div className="hidden sm:flex flex-col min-w-0 flex-1">
           <div className="flex items-center gap-2.5">
-            <Badge variant="secondary" className="bg-primary/8 text-primary hover:bg-primary/12 transition-colors py-0.5 px-2.5 text-[10px] uppercase tracking-[0.08em] font-semibold rounded-md">
+            <Badge variant="secondary" className="bg-primary/10 text-primary hover:bg-primary/15 transition-colors py-0.5 px-2.5 text-[10px] font-semibold rounded-md">
               {course.category?.name || "Course"}
             </Badge>
             <p className="text-[13px] font-semibold text-foreground truncate tracking-tight">{course.title}</p>
           </div>
           <div className="flex items-center gap-2.5 mt-1">
             <div className="w-32 bg-muted/60 rounded-full h-[5px] overflow-hidden">
-              <div 
-                className="bg-gradient-to-r from-primary to-emerald-500 h-full transition-all duration-700 ease-out rounded-full" 
+              <div
+                className="bg-primary h-full transition-all duration-700 ease-out rounded-full"
                 style={{ width: `${progressPercent}%` }}
               />
             </div>
@@ -1222,14 +1214,14 @@ export default function CoursePlayer() {
                   </span>
                </div>
                <div className="flex items-center gap-1.5">
-                  <Badge variant="outline" className="text-[10px] font-semibold bg-emerald-500/5 text-emerald-600 border-emerald-500/15 py-0 px-2 rounded-md">
+                  <Badge variant="outline" className="text-[10px] font-semibold bg-success/5 text-success border-success/15 py-0 px-2 rounded-md">
                     {analytics.lessons_completed} completed
                   </Badge>
                </div>
              </div>
           )}
           <div className="hidden md:flex flex-col items-end">
-            <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide">Progress</span>
+            <span className="text-[10px] font-semibold text-muted-foreground">Progress</span>
             <span className="text-xs font-semibold text-foreground tracking-tight">{completedLessons.size} of {totalLessons} Lessons</span>
           </div>
           <Button
@@ -1248,19 +1240,19 @@ export default function CoursePlayer() {
 
       {/* Certificate Banner — shown when course is 100% complete */}
       {progressPercent >= 100 && (
-        <div className="flex flex-wrap items-center gap-2 border-b border-amber-200 bg-gradient-to-r from-amber-50 via-amber-50/80 to-yellow-50 dark:from-amber-950/30 dark:via-amber-900/20 dark:to-yellow-950/20 px-3 py-2 shrink-0 z-10 sm:flex-nowrap sm:gap-3 sm:px-6 sm:py-3">
-          <Award className="h-5 w-5 text-amber-600 shrink-0" />
+        <div className="flex flex-wrap items-center gap-2 border-b border-accent/30 bg-accent/10 px-3 py-2 shrink-0 z-10 sm:flex-nowrap sm:gap-3 sm:px-6 sm:py-3">
+          <Award className="h-5 w-5 text-accent shrink-0" />
           <div className="flex-1 min-w-0">
             <p className="text-sm font-semibold text-foreground">Congratulations! You completed this course!</p>
             <p className="text-xs text-muted-foreground">Claim your certificate of completion.</p>
           </div>
           {enrollment?.certificate_issued ? (
-            <Button size="sm" variant="outline" className="shrink-0 gap-1.5 border-amber-300 hover:bg-amber-100" onClick={() => window.open(getCertificateViewUrl(enrollment.enrollment_id), '_blank')}>
-              <Award className="h-3.5 w-3.5 text-amber-600" />
+            <Button size="sm" variant="outline" className="shrink-0 gap-1.5 border-accent/40 hover:bg-accent/10" onClick={() => window.open(getCertificateViewUrl(enrollment.enrollment_id), '_blank')}>
+              <Award className="h-3.5 w-3.5 text-accent" />
               View Certificate
             </Button>
           ) : enrollment ? (
-            <Button size="sm" className="shrink-0 gap-1.5 bg-amber-600 hover:bg-amber-700" disabled={certLoading} onClick={async () => {
+            <Button size="sm" className="shrink-0 gap-1.5 bg-accent text-accent-foreground hover:bg-accent/90" disabled={certLoading} onClick={async () => {
               setCertLoading(true)
               try {
                 const res = await issueCertificate(enrollment.enrollment_id)
@@ -1273,7 +1265,7 @@ export default function CoursePlayer() {
               {certLoading ? "Issuing..." : "Get Certificate"}
             </Button>
           ) : (
-            <Loader2 className="h-4 w-4 animate-spin text-amber-600 shrink-0" />
+            <Loader2 className="h-4 w-4 animate-spin text-accent shrink-0" />
           )}
         </div>
       )}
@@ -1371,14 +1363,14 @@ export default function CoursePlayer() {
 
                   {/* Quiz Content */}
                   {currentLesson?.content_type === "quiz" && (
-                    <div className="flex-1 flex flex-col items-center justify-center p-8 bg-gradient-to-br from-slate-900 to-slate-950 min-h-[500px]">
+                    <div className="flex-1 flex flex-col items-center justify-center p-8 bg-sidebar min-h-[500px]">
                       {quizLoading ? (
                         <Loader2 className="h-8 w-8 animate-spin text-primary" />
                       ) : quizSubmitted ? (
                         <div className="max-w-lg w-full bg-white/5 backdrop-blur border border-white/10 p-10 rounded-2xl text-center animate-in zoom-in-95 duration-500">
                           <div className={cn(
                             "w-20 h-20 rounded-full flex items-center justify-center mx-auto mb-6",
-                            quizResult?.passed ? "bg-emerald-500/20 text-emerald-400" : "bg-amber-500/20 text-amber-400"
+                            quizResult?.passed ? "bg-success/20 text-success" : "bg-accent/20 text-accent"
                           )}>
                             {quizResult?.passed ? <Trophy className="w-10 h-10" /> : <AlertCircle className="w-10 h-10" />}
                           </div>
@@ -1387,11 +1379,11 @@ export default function CoursePlayer() {
                           </h2>
                           <div className="flex items-center justify-center gap-3 mb-6">
                             <div className="text-4xl font-bold text-white">{quizResult?.score}%</div>
-                            <div className="text-slate-500 text-xs font-medium uppercase tracking-wider text-left">
+                            <div className="text-sidebar-foreground/50 text-xs font-medium text-left">
                               Final<br/>Score
                             </div>
                           </div>
-                          <p className="text-sm text-slate-400 mb-8 leading-relaxed max-w-sm mx-auto">
+                          <p className="text-sm text-sidebar-foreground/70 mb-8 leading-relaxed max-w-sm mx-auto">
                             {quizResult?.passed 
                               ? "You've mastered the concepts in this module. Proceed to the next section."
                               : "Review the material and try again to unlock the next module."
@@ -1419,18 +1411,18 @@ export default function CoursePlayer() {
                         <div className="max-w-2xl w-full space-y-6 animate-in fade-in duration-500">
                           <div className="flex items-center justify-between mb-6">
                             <div>
-                              <p className="text-xs font-semibold text-primary uppercase tracking-wider mb-1">Knowledge Check</p>
+                              <p className="text-xs font-semibold text-primary mb-1">Knowledge Check</p>
                               <h3 className="text-lg font-bold text-white">{quizData.title}</h3>
                             </div>
                             <div className="text-right">
-                              <p className="text-xs text-slate-500">Pass: {quizData.pass_percentage}%</p>
+                              <p className="text-xs text-sidebar-foreground/50">Pass: {quizData.pass_percentage}%</p>
                             </div>
                           </div>
                           
                           <div className="space-y-5">
                             {quizData.questions.map((q, idx) => (
                               <div key={q.question_id} className="bg-white/5 border border-white/10 p-6 rounded-xl">
-                                <p className="text-sm font-medium text-slate-300 mb-4 flex items-start gap-3">
+                                <p className="text-sm font-medium text-sidebar-foreground mb-4 flex items-start gap-3">
                                   <span className="text-primary font-bold text-xs mt-0.5">{idx + 1}.</span>
                                   {q.question_text}
                                 </p>
@@ -1440,10 +1432,10 @@ export default function CoursePlayer() {
                                       key={optIdx}
                                       onClick={() => setQuizAnswers(prev => ({ ...prev, [q.question_id]: optIdx }))}
                                       className={cn(
-                                        "px-4 py-3 rounded-lg text-left text-sm transition-all duration-200 border",
+                                        "px-4 py-3 rounded-lg text-left text-sm transition-all duration-200 border focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary-bright",
                                         quizAnswers[q.question_id] === optIdx
-                                          ? "bg-primary border-primary text-white font-medium"
-                                          : "bg-white/5 border-white/10 text-slate-400 hover:border-white/20 hover:bg-white/10"
+                                          ? "bg-primary border-primary text-primary-foreground font-medium"
+                                          : "bg-white/5 border-white/10 text-sidebar-foreground/70 hover:border-white/20 hover:bg-white/10"
                                       )}
                                     >
                                       <span className="mr-2 opacity-50 text-xs">
@@ -1458,7 +1450,7 @@ export default function CoursePlayer() {
                           </div>
                           
                           <div className="pt-6 border-t border-white/10 flex items-center justify-between">
-                            <p className="text-xs text-slate-500">Answer all questions before submitting.</p>
+                            <p className="text-xs text-sidebar-foreground/50">Answer all questions before submitting.</p>
                             <Button 
                               onClick={handleQuizSubmit}
                               disabled={Object.keys(quizAnswers).length < quizData.questions.length}
@@ -1475,7 +1467,7 @@ export default function CoursePlayer() {
                           </div>
                           <div className="space-y-2">
                             <h2 className="text-2xl font-bold text-white">Quiz Time</h2>
-                            <p className="text-sm text-slate-400 leading-relaxed">
+                            <p className="text-sm text-sidebar-foreground/70 leading-relaxed">
                               Test your knowledge. You need at least 
                               <span className="text-white font-semibold ml-1">{quizData?.pass_percentage}%</span> to pass.
                             </p>
@@ -1483,12 +1475,12 @@ export default function CoursePlayer() {
                           <div className="flex items-center justify-center gap-6 py-2">
                             <div className="text-center">
                               <p className="text-xl font-bold text-white">{quizData?.total_questions || 0}</p>
-                              <p className="text-xs text-slate-500">Questions</p>
+                              <p className="text-xs text-sidebar-foreground/50">Questions</p>
                             </div>
                             <div className="w-px h-6 bg-white/10" />
                             <div className="text-center">
                               <p className="text-xl font-bold text-white">{quizData?.time_limit_minutes || 15}</p>
-                              <p className="text-xs text-slate-500">Minutes</p>
+                              <p className="text-xs text-sidebar-foreground/50">Minutes</p>
                             </div>
                           </div>
                           <Button 
@@ -1578,20 +1570,20 @@ export default function CoursePlayer() {
                       <div className="px-4 py-5 sm:px-6 lg:px-8">
                         <button
                           onClick={() => setCodePlaygroundOpen(!codePlaygroundOpen)}
-                          className="flex items-center gap-3 w-full px-5 py-3.5 rounded-xl bg-gradient-to-r from-amber-500/5 via-orange-500/5 to-amber-500/5 hover:from-amber-500/10 hover:via-orange-500/10 hover:to-amber-500/10 border border-amber-500/15 hover:border-amber-500/25 transition-all duration-300 group"
+                          className="flex items-center gap-3 w-full px-5 py-3.5 rounded-xl bg-muted/40 hover:bg-muted border border-border transition-colors duration-200 group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
                         >
-                          <div className="p-1.5 rounded-lg bg-amber-500/10">
-                            <Sparkles className="w-4 h-4 text-amber-500" />
+                          <div className="p-1.5 rounded-lg bg-primary/10">
+                            <Sparkles className="w-4 h-4 text-primary" />
                           </div>
-                          <span className="text-sm font-semibold text-foreground tracking-tight">Exercise Instructions</span>
-                          <Badge variant="outline" className="text-[9px] px-2 py-0 ml-1 border-amber-500/20 text-amber-600 bg-amber-500/5 font-bold">
+                          <span className="text-sm font-semibold text-foreground tracking-tight">Exercise instructions</span>
+                          <Badge variant="secondary" className="text-[10px] px-2 py-0 ml-1 font-semibold">
                             {currentLesson.text_content.match(/```sql/g)?.length || 0} exercises
                           </Badge>
                           <ChevronDown className={cn("w-4 h-4 ml-auto transition-transform duration-300 text-muted-foreground group-hover:text-foreground", codePlaygroundOpen && "rotate-180")} />
                         </button>
                         {codePlaygroundOpen && (
                           <div className="mt-4 px-2 animate-in fade-in slide-in-from-top-2 duration-300">
-                            <div className="prose prose-sm dark:prose-invert prose-headings:font-bold prose-headings:tracking-tight prose-headings:text-foreground prose-h2:text-xl prose-h3:text-base prose-p:text-foreground/75 prose-p:leading-relaxed prose-strong:text-foreground prose-code:text-emerald-500 prose-code:bg-emerald-500/5 prose-code:border prose-code:border-emerald-500/10 prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded-md prose-code:text-xs prose-code:font-semibold prose-pre:bg-slate-950 prose-pre:border prose-pre:border-slate-800/60 prose-pre:text-slate-200 prose-pre:rounded-xl prose-li:text-foreground/75 prose-li:leading-relaxed prose-a:text-primary prose-a:font-medium max-w-none">
+                            <div className="prose prose-sm dark:prose-invert prose-headings:font-bold prose-headings:tracking-tight prose-headings:text-foreground prose-h2:text-xl prose-h3:text-base prose-p:text-foreground/75 prose-p:leading-relaxed prose-strong:text-foreground prose-code:text-success prose-code:bg-success/5 prose-code:border prose-code:border-success/10 prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded-md prose-code:text-xs prose-code:font-semibold prose-pre:bg-sidebar prose-pre:border prose-pre:border-sidebar-border prose-pre:text-sidebar-foreground prose-pre:rounded-xl prose-li:text-foreground/75 prose-li:leading-relaxed prose-a:text-primary prose-a:font-medium max-w-none">
                               <ReactMarkdown remarkPlugins={[remarkGfm]}>
                                 {currentLesson.text_content}
                               </ReactMarkdown>
@@ -1676,7 +1668,7 @@ export default function CoursePlayer() {
                     {currentLesson?.content_type !== "text" && currentLesson?.text_content ? (
                       <Card className="border-border/60 shadow-sm">
                         <CardContent className="p-5 sm:p-6">
-                          <div className="prose prose-sm dark:prose-invert prose-headings:font-bold prose-headings:tracking-tight prose-headings:text-foreground prose-p:text-foreground/75 prose-p:leading-relaxed prose-strong:text-foreground prose-code:text-emerald-500 prose-code:bg-emerald-500/5 prose-code:border prose-code:border-emerald-500/10 prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded-md prose-code:text-xs prose-pre:bg-slate-950 prose-pre:border prose-pre:border-slate-800/60 prose-pre:text-slate-200 prose-pre:rounded-xl prose-li:text-foreground/75 max-w-none">
+                          <div className="prose prose-sm dark:prose-invert prose-headings:font-bold prose-headings:tracking-tight prose-headings:text-foreground prose-p:text-foreground/75 prose-p:leading-relaxed prose-strong:text-foreground prose-code:text-success prose-code:bg-success/5 prose-code:border prose-code:border-success/10 prose-code:px-1.5 prose-code:py-0.5 prose-code:rounded-md prose-code:text-xs prose-pre:bg-sidebar prose-pre:border prose-pre:border-sidebar-border prose-pre:text-sidebar-foreground prose-pre:rounded-xl prose-li:text-foreground/75 max-w-none">
                             <ReactMarkdown remarkPlugins={[remarkGfm]}>
                               {currentLesson.text_content}
                             </ReactMarkdown>
@@ -1698,11 +1690,11 @@ export default function CoursePlayer() {
                     <div className="border-t border-border pt-4">
                       <button
                         onClick={() => setCodePlaygroundOpen(!codePlaygroundOpen)}
-                        className="flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors w-full"
+                        className="flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors w-full rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
                       >
                         <Terminal className="w-4 h-4" />
                         <span>Code Playground</span>
-                        <Badge variant="outline" className="text-[9px] px-1.5 py-0 ml-1 border-emerald-500/30 text-emerald-500 bg-emerald-500/5">SQL / Python</Badge>
+                        <Badge variant="outline" className="text-[9px] px-1.5 py-0 ml-1 border-success/30 text-success bg-success/5">SQL / Python</Badge>
                         <ChevronDown className={cn("w-4 h-4 ml-auto transition-transform", codePlaygroundOpen && "rotate-180")} />
                       </button>
                       {codePlaygroundOpen && (
@@ -1717,7 +1709,7 @@ export default function CoursePlayer() {
                     <div className="border-t border-border pt-4">
                       <button
                         onClick={() => setNotesOpen(!notesOpen)}
-                        className="flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors w-full"
+                        className="flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors w-full rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
                       >
                         <StickyNote className="w-4 h-4" />
                         <span>My Notes</span>
@@ -1732,7 +1724,7 @@ export default function CoursePlayer() {
                             className="w-full min-h-[120px] p-3 rounded-lg border border-border bg-muted/30 text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-2 focus:ring-primary/30 resize-y"
                           />
                           <div className="flex items-center justify-between">
-                            <span className={cn("text-xs transition-opacity", noteSaved ? "text-emerald-500 opacity-100" : "opacity-0")}>
+                            <span className={cn("text-xs transition-opacity", noteSaved ? "text-success opacity-100" : "opacity-0")}>
                               ✓ Saved
                             </span>
                             <Button size="sm" variant="outline" className="h-8" onClick={handleSaveNote}>
@@ -1745,11 +1737,11 @@ export default function CoursePlayer() {
 
                     {/* Instructor */}
                     <div className="flex items-center gap-3 pt-5 border-t border-border/60">
-                      <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-primary/20 to-primary/5 flex items-center justify-center text-sm font-bold text-primary ring-1 ring-primary/10">
+                      <div className="h-10 w-10 rounded-xl bg-primary/10 flex items-center justify-center text-sm font-bold text-primary ring-1 ring-primary/15">
                         {course?.instructor?.first_name?.[0]}{course?.instructor?.last_name?.[0]}
                       </div>
                       <div>
-                        <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Instructor</p>
+                        <p className="text-[10px] font-semibold text-muted-foreground">Instructor</p>
                         <p className="text-sm font-semibold text-foreground tracking-tight">
                           {course?.instructor?.first_name} {course?.instructor?.last_name}
                         </p>
@@ -1769,7 +1761,7 @@ export default function CoursePlayer() {
                           className={cn(
                             "w-full h-11 font-semibold transition-all",
                             currentLesson && completedLessons.has(currentLesson.lesson_id) 
-                              ? "border-emerald-500/50 text-emerald-600 bg-emerald-50 hover:bg-emerald-100 cursor-default opacity-100" 
+                              ? "border-success/50 text-success bg-success/10 hover:bg-success/15 cursor-default opacity-100" 
                               : ""
                           )}
                         >
@@ -1833,17 +1825,17 @@ export default function CoursePlayer() {
                       </CardContent>
                     </Card>
                     {analytics && (
-                       <Card className="border-slate-100 bg-slate-50/30">
+                       <Card className="border-border bg-muted/30">
                          <CardContent className="p-4 space-y-3">
-                            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Learning Stats (MongoDB)</p>
+                            <p className="text-xs font-semibold text-muted-foreground">Learning stats</p>
                             <div className="grid grid-cols-2 gap-2">
-                               <div className="bg-white rounded-lg p-2 border border-slate-100">
-                                  <p className="text-[10px] text-slate-400">Time Spent</p>
-                                  <p className="text-xs font-bold text-slate-700">{Math.round(analytics.total_time_spent_seconds / 60)}m</p>
+                               <div className="bg-card rounded-lg p-2 border border-border">
+                                  <p className="text-[10px] text-muted-foreground">Time spent</p>
+                                  <p className="text-xs font-bold text-foreground">{Math.round(analytics.total_time_spent_seconds / 60)}m</p>
                                </div>
-                               <div className="bg-white rounded-lg p-2 border border-slate-100">
-                                  <p className="text-[10px] text-slate-400">Started</p>
-                                  <p className="text-xs font-bold text-slate-700">{analytics.lessons_started} lessons</p>
+                               <div className="bg-card rounded-lg p-2 border border-border">
+                                  <p className="text-[10px] text-muted-foreground">Started</p>
+                                  <p className="text-xs font-bold text-foreground">{analytics.lessons_started} lessons</p>
                                </div>
                             </div>
                          </CardContent>
@@ -1858,12 +1850,12 @@ export default function CoursePlayer() {
 
         {/* Professional Sidebar - Curriculum Panel */}
         {sidebarOpen && (
-          <aside className="absolute inset-0 sm:relative sm:inset-auto w-full sm:w-[300px] flex flex-col border-l border-border/30 bg-white dark:bg-slate-950 overflow-hidden shrink-0 z-30 sm:z-10 animate-in slide-in-from-right duration-300">
+          <aside className="absolute inset-0 sm:relative sm:inset-auto w-full sm:w-[300px] flex flex-col border-l border-border/30 bg-white dark:bg-sidebar overflow-hidden shrink-0 z-30 sm:z-10 animate-in slide-in-from-right duration-300">
             {/* Sidebar Header */}
             <div className="px-5 pt-5 pb-4 border-b border-border/30">
               <div className="flex items-center justify-between mb-3">
                 <div>
-                  <p className="text-[10px] font-semibold text-primary uppercase tracking-[0.15em] mb-0.5">Course Content</p>
+                  <p className="text-[10px] font-semibold text-primary mb-0.5">Course Content</p>
                   <h4 className="text-base font-bold text-foreground tracking-tight">Curriculum</h4>
                 </div>
                 <div className="flex items-center gap-2">
@@ -1878,8 +1870,8 @@ export default function CoursePlayer() {
               {/* Mini progress bar */}
               <div className="flex items-center gap-2.5">
                 <div className="flex-1 h-1 bg-muted/50 rounded-full overflow-hidden">
-                  <div 
-                    className="h-full bg-gradient-to-r from-primary to-emerald-400 rounded-full transition-all duration-700 ease-out"
+                  <div
+                    className="h-full bg-primary rounded-full transition-all duration-700 ease-out"
                     style={{ width: `${progressPercent}%` }}
                   />
                 </div>
@@ -1903,21 +1895,21 @@ export default function CoursePlayer() {
                     className={cn(
                       "rounded-xl overflow-hidden transition-all duration-200",
                       isModuleExpanded 
-                        ? "bg-muted/30 dark:bg-slate-900/40" 
+                        ? "bg-muted/30 dark:bg-sidebar/40" 
                         : "hover:bg-muted/20"
                     )}
                   >
                     {/* Module Header */}
                     <button
                       onClick={() => toggleModule(mod.module_id)}
-                      className="flex w-full items-center gap-3 px-3.5 py-3 text-left transition-all duration-200 group/module"
+                      className="flex w-full items-center gap-3 rounded-lg px-3.5 py-3 text-left transition-all duration-200 group/module focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
                     >
                       {/* Module Number Badge */}
                       <div className={cn(
                         "h-9 w-9 rounded-lg flex items-center justify-center text-xs font-bold shrink-0 transition-all duration-200",
                         hasActiveLesson || isModuleExpanded
-                          ? "bg-primary text-white"
-                          : "bg-muted/60 dark:bg-slate-800 text-muted-foreground group-hover/module:bg-primary/10 group-hover/module:text-primary"
+                          ? "bg-primary text-primary-foreground"
+                          : "bg-muted/60 dark:bg-sidebar-accent text-muted-foreground group-hover/module:bg-primary/10 group-hover/module:text-primary"
                       )}>
                         {modIdx + 1}
                       </div>
@@ -1936,7 +1928,7 @@ export default function CoursePlayer() {
                           {moduleLessons.length > 0 && moduleCompletedCount > 0 && (
                             <>
                               <span className="text-muted-foreground/30">•</span>
-                              <span className="text-[10px] font-semibold text-emerald-600">
+                              <span className="text-[10px] font-semibold text-success">
                                 {Math.round((moduleCompletedCount / moduleLessons.length) * 100)}%
                               </span>
                             </>
@@ -1947,7 +1939,7 @@ export default function CoursePlayer() {
                       {/* Progress fraction + Expand toggle */}
                       <div className="flex items-center gap-2 shrink-0">
                         {moduleCompletedCount > 0 && (
-                          <span className="text-[10px] font-semibold text-emerald-600 tabular-nums">
+                          <span className="text-[10px] font-semibold text-success tabular-nums">
                             {moduleCompletedCount}/{moduleLessons.length}
                           </span>
                         )}
@@ -1971,9 +1963,9 @@ export default function CoursePlayer() {
                                 key={lesson.lesson_id}
                                 onClick={() => handleLessonClick(lesson)}
                                 className={cn(
-                                  "flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-[12.5px] transition-all duration-150 group/lesson",
+                                  "flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-[12.5px] transition-all duration-150 group/lesson focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
                                   isActive
-                                    ? "bg-primary text-white"
+                                    ? "bg-primary text-primary-foreground"
                                     : "text-foreground/70 hover:bg-muted/50 hover:text-foreground"
                                 )}
                               >
@@ -1983,16 +1975,16 @@ export default function CoursePlayer() {
                                   isActive 
                                     ? "bg-white/20" 
                                     : isCompleted 
-                                      ? "bg-emerald-50 dark:bg-emerald-500/10" 
-                                      : "bg-muted/50 dark:bg-slate-800 group-hover/lesson:bg-primary/5"
+                                      ? "bg-success/10 dark:bg-success/10" 
+                                      : "bg-muted/50 dark:bg-sidebar-accent group-hover/lesson:bg-primary/5"
                                 )}>
                                   {isCompleted && !isActive ? (
-                                    <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" />
+                                    <CheckCircle2 className="h-3.5 w-3.5 text-success" />
                                   ) : (
                                     <Icon className={cn(
                                       "h-3.5 w-3.5 transition-colors",
                                       isActive 
-                                        ? "text-white" 
+                                        ? "text-primary-foreground" 
                                         : "text-muted-foreground/60 group-hover/lesson:text-primary"
                                     )} />
                                   )}
@@ -2008,7 +2000,7 @@ export default function CoursePlayer() {
 
                                 {/* Completed Check for Active */}
                                 {isCompleted && isActive && (
-                                  <CheckCircle2 className="h-3.5 w-3.5 text-white/70 shrink-0" />
+                                  <CheckCircle2 className="h-3.5 w-3.5 text-primary-foreground/70 shrink-0" />
                                 )}
                               </button>
                             )

@@ -73,3 +73,30 @@ export async function getResumeAnalysis(studentId: number): Promise<ResumeAnalys
   if (!res.ok) throw new Error("Failed to fetch resume analysis");
   return res.json();
 }
+
+export async function scoreResume(
+  studentId: number,
+  body: { job_id?: number; target?: T.ScoreTarget },
+): Promise<{ success: boolean; report: T.ResumeScoreReport }> {
+  const res = await fetch(`${API_BASE_URL}/tracking/resume/score?student_id=${studentId}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ detail: "Scoring failed" }));
+    throw new Error(err.detail || "Scoring failed");
+  }
+  return res.json();
+}
+
+export async function getResumeReport(
+  studentId: number,
+  jobId?: number,
+): Promise<T.ResumeReportDoc | null> {
+  const qs = jobId != null ? `?job_id=${jobId}` : "";
+  const res = await fetch(`${API_BASE_URL}/tracking/resume/${studentId}/report${qs}`);
+  if (res.status === 404) return null;
+  if (!res.ok) throw new Error("Failed to fetch resume report");
+  return res.json();
+}

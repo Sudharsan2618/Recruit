@@ -96,6 +96,9 @@ def notification_queue():
 def resume_analysis():
     return get_mongodb()["resume_analysis"]
 
+def resume_reports():
+    return get_mongodb()["resume_reports"]
+
 
 # ── Index creation (run once on first deploy) ──────────────────────────────
 
@@ -164,6 +167,11 @@ async def ensure_indexes() -> None:
     # resume_analysis
     ra = db["resume_analysis"]
     await ra.create_index([("student_id", 1)], unique=True)
+
+    # resume_reports — one report per student per target, latest wins
+    rr = db["resume_reports"]
+    await rr.create_index([("student_id", 1), ("target_key", 1)], unique=True)
+    await rr.create_index([("student_id", 1), ("generated_at", -1)])
 
     print("[MONGO] Indexes ensured")
 

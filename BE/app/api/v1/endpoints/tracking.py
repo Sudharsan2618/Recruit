@@ -27,6 +27,7 @@ from app.schemas.tracking import (
     CourseEngagementSummary,
     XAPIStatementRequest,
 )
+from app.schemas.resume_report import ScoreRequest
 
 
 router = APIRouter(prefix="/tracking", tags=["Learning Analytics & xAPI"])
@@ -384,6 +385,74 @@ async def get_resume(student_id: int):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Resume fetch failed: {e}")
+
+
+@router.post(
+    "/resume/score",
+    summary="Score a resume against a target job or role",
+    description="Runs the full Resume Score Report (match/ATS/skills/experience, hiring intelligence, "
+                "strengths, gaps, skill intelligence, ATS keywords, coaching, plan, risk) against a chosen "
+                "Job (job_id) or a manual target role. Reuses the stored resume text — no re-upload needed.",
+)
+async def score_resume_endpoint(
+    body: ScoreRequest,
+    student_id: int = Query(..., description="Student ID"),
+):
+    try:
+        # 1. Load the stored resume text (persisted on upload)
+        from app.services.resume_service import get_resume_analysis
+        analysis = await get_resume_analysis(student_id)
+        resume_text = (analysis or {}).get("resume_text")
+        if not resume_text:
+            raise HTTPException(
+                status_code=400,
+                detail="No resume on file. Upload and analyze a resume first.",
+            )
+
+        # 2. Build the target context (a Job on the board, or a manual role)
+        from app.services.resume_score_service import (
+            normalize_job_target, normalize_manual_target, score_resume,
+        )
+        if body.job_id:
+            from app.db.postgres import async_session_factory
+            from app.services.matching_service import MatchingService
+            async with async_session_factory() as session:
+                svc = MatchingService(session)
+                job = await svc.get_job_detail(body.job_id, student_id=student_id)
+            if not job:
+                raise HTTPException(status_code=404, detail="Job not found")
+            ctx = normalize_job_target(job)
+        elif body.target:
+            ctx = normalize_manual_target(body.target.model_dump())
+        else:
+            raise HTTPException(status_code=400, detail="Provide either job_id or a target role.")
+
+        report = await score_resume(student_id, resume_text, ctx)
+        return {"success": True, "report": report}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Resume scoring failed: {e}")
+
+
+@router.get(
+    "/resume/{student_id}/report",
+    summary="Get the latest resume score report for a student",
+)
+async def get_resume_report(
+    student_id: int,
+    job_id: Optional[int] = Query(None, description="Filter to a specific job's report"),
+):
+    try:
+        from app.services.resume_score_service import get_latest_report
+        doc = await get_latest_report(student_id, job_id=job_id)
+        if not doc:
+            raise HTTPException(status_code=404, detail="No score report found")
+        return doc
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Report fetch failed: {e}")
 
 
 # ══════════════════════════════════════════════════════════════════════════

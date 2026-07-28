@@ -106,6 +106,7 @@ async def analyze_resume(
         "file_url": file_url,
         "analyzed_at": now,
         "extracted_data": extracted_data,
+        "resume_text": resume_text[:20000],  # retained so the Score Report can re-score without re-upload
         "resume_text_length": len(resume_text),
         "match_score_ready": True,
     }

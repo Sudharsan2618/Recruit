@@ -77,7 +77,7 @@ export async function getResumeAnalysis(studentId: number): Promise<ResumeAnalys
 export async function scoreResume(
   studentId: number,
   body: { job_id?: number; target?: T.ScoreTarget },
-): Promise<{ success: boolean; report: T.ResumeScoreReport }> {
+): Promise<{ success: boolean; report_id: string; report: T.ResumeScoreReport }> {
   const res = await fetch(`${API_BASE_URL}/tracking/resume/score?student_id=${studentId}`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -99,4 +99,14 @@ export async function getResumeReport(
   if (res.status === 404) return null;
   if (!res.ok) throw new Error("Failed to fetch resume report");
   return res.json();
+}
+
+export async function listResumeReports(
+  studentId: number,
+  limit = 25,
+): Promise<T.ResumeReportRun[]> {
+  const res = await fetch(`${API_BASE_URL}/tracking/resume/${studentId}/reports?limit=${limit}`);
+  if (!res.ok) throw new Error("Failed to fetch resume report history");
+  const data = await res.json();
+  return data.reports || [];
 }

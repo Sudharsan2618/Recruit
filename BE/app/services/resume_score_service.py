@@ -195,6 +195,7 @@ async def score_resume(
     student_id: int,
     resume_text: str,
     ctx: dict,
+    resume_ref: Optional[dict] = None,
 ) -> dict[str, Any]:
     """Run the LLM scoring, validate/clamp, persist, and return the report dict."""
     target_block = build_target_text(ctx)
@@ -227,21 +228,18 @@ async def score_resume(
     report = ResumeScoreReport(meta=meta, **llm_report.model_dump())
     report_dict = report.model_dump()
 
-    # Persist — latest per (student, target)
+    # Persist — every run is kept as its own version (history).
     db = get_mongodb()
     key = target_key(ctx)
-    await db["resume_reports"].replace_one(
-        {"student_id": student_id, "target_key": key},
-        {
-            "student_id": student_id,
-            "target_key": key,
-            "generated_at": to_bson_datetime(now),
-            "report": report_dict,
-        },
-        upsert=True,
-    )
+    result = await db["resume_reports"].insert_one({
+        "student_id": student_id,
+        "target_key": key,
+        "generated_at": to_bson_datetime(now),
+        "resume_ref": resume_ref or {},
+        "report": report_dict,
+    })
 
-    return report_dict
+    return {"report_id": str(result.inserted_id), "report": report_dict}
 
 
 async def get_latest_report(student_id: int, job_id: Optional[int] = None) -> Optional[dict]:
@@ -250,5 +248,18 @@ async def get_latest_report(student_id: int, job_id: Optional[int] = None) -> Op
     query: dict[str, Any] = {"student_id": student_id}
     if job_id is not None:
         query["target_key"] = f"job_{job_id}"
-    doc = await db["resume_reports"].find_one(query, {"_id": 0}, sort=[("generated_at", -1)])
+    doc = await db["resume_reports"].find_one(query, sort=[("generated_at", -1)])
+    if doc:
+        doc["report_id"] = str(doc.pop("_id"))
     return doc
+
+
+async def list_reports(student_id: int, limit: int = 25) -> list[dict]:
+    """Return a student's score-report history, newest first."""
+    db = get_mongodb()
+    cursor = db["resume_reports"].find({"student_id": student_id}).sort("generated_at", -1).limit(limit)
+    docs: list[dict] = []
+    async for d in cursor:
+        d["report_id"] = str(d.pop("_id"))
+        docs.append(d)
+    return docs

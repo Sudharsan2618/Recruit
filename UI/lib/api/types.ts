@@ -394,6 +394,21 @@ export interface ResumeScoreReport {
   interview_risk: InterviewRisk;
 }
 
+export interface ResumeRef {
+  file_url: string | null;
+  file_name: string | null;
+  analyzed_at?: string | null;
+}
+
+export interface ResumeReportRun {
+  report_id: string;
+  student_id: number;
+  target_key: string;
+  generated_at: string;
+  resume_ref?: ResumeRef;
+  report: ResumeScoreReport;
+}
+
 export interface ResumeReportDoc {
   student_id: number;
   target_key: string;

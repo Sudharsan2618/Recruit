@@ -450,8 +450,20 @@ async def score_resume_endpoint(
         else:
             raise HTTPException(status_code=400, detail="Provide either job_id or a target role.")
 
-        report = await score_resume(student_id, resume_text, ctx)
-        return {"success": True, "report": report}
+        # Capture which resume this run scored (metadata for history)
+        file_url = (analysis or {}).get("file_url") or ""
+        raw_name = file_url.split("/")[-1] if file_url else ""
+        # Strip the "YYYYMMDD_HHMMSS_" GCS prefix if present
+        parts = raw_name.split("_")
+        file_name = "_".join(parts[2:]) if len(parts) > 2 and parts[0].isdigit() else raw_name
+        resume_ref = {
+            "file_url": file_url or None,
+            "file_name": file_name or None,
+            "analyzed_at": (analysis or {}).get("analyzed_at"),
+        }
+
+        result = await score_resume(student_id, resume_text, ctx, resume_ref=resume_ref)
+        return {"success": True, "report_id": result["report_id"], "report": result["report"]}
     except HTTPException:
         raise
     except Exception as e:
@@ -476,6 +488,21 @@ async def get_resume_report(
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Report fetch failed: {e}")
+
+
+@router.get(
+    "/resume/{student_id}/reports",
+    summary="List a student's resume score-report history (newest first)",
+)
+async def list_resume_reports(
+    student_id: int,
+    limit: int = Query(25, ge=1, le=100),
+):
+    try:
+        from app.services.resume_score_service import list_reports
+        return {"reports": await list_reports(student_id, limit=limit)}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Report history fetch failed: {e}")
 
 
 # ══════════════════════════════════════════════════════════════════════════

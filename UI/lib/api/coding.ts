@@ -2,7 +2,7 @@ import { API_BASE_URL } from "./client"
 
 export type CodingEngine = "sql" | "pandas" | "pyspark" | "python" | "systemdesign"
 export type CodingDifficulty = "easy" | "medium" | "hard"
-export type CodingVerdict = "passed" | "wrong_answer" | "runtime_error"
+export type CodingVerdict = "passed" | "wrong_answer" | "runtime_error" | "not_supported"
 
 export interface CodingQuestionBrief {
   slug: string
@@ -15,6 +15,7 @@ export interface CodingQuestionBrief {
   company_tags: string[]
   points: number
   solved?: boolean
+  solvable?: boolean
 }
 
 export interface CodingQuestion extends CodingQuestionBrief {
@@ -24,6 +25,8 @@ export interface CodingQuestion extends CodingQuestionBrief {
   explanation_md: string
   ordering_matters: boolean
   expected_columns: string[]
+  expected_row_count: number | null
+  solvable: boolean
 }
 
 export interface CodingFacets {

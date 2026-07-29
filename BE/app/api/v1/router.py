@@ -15,6 +15,7 @@ from app.api.v1.endpoints.notifications import router as notifications_router
 from app.api.v1.endpoints.reviews import router as reviews_router
 from app.api.v1.endpoints.certificates import router as certificates_router
 from app.api.v1.endpoints.payments import router as payments_router
+from app.api.v1.endpoints.coding import router as coding_router
 
 router = APIRouter()
 
@@ -32,5 +33,6 @@ router.include_router(notifications_router)
 router.include_router(reviews_router)
 router.include_router(certificates_router)
 router.include_router(payments_router)
+router.include_router(coding_router)
 
 

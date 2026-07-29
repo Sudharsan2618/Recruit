@@ -8,3 +8,4 @@ export * from './admin';
 export * from './admin-courses';
 export * from './notifications';
 export * from './tracking';
+export * from './coding';

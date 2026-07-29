@@ -5,21 +5,38 @@ import { useParams, useRouter } from "next/navigation"
 import Link from "next/link"
 import ReactMarkdown from "react-markdown"
 import remarkGfm from "remark-gfm"
-import { ArrowLeft, Loader2, Lightbulb, Table2, Lock, Check, ListChecks } from "lucide-react"
+import { ArrowLeft, Loader2, Lightbulb, Table2, Lock, Check, ListChecks, Clock3 } from "lucide-react"
 import { useAuth } from "@/lib/auth-context"
 import { getCodingQuestion, type CodingQuestion } from "@/lib/api"
 import CodeRunner from "@/components/coding/CodeRunner"
 
-const CHINOOK_SCHEMA: { table: string; columns: string[] }[] = [
-  { table: "Artist", columns: ["ArtistId", "Name"] },
-  { table: "Album", columns: ["AlbumId", "Title", "ArtistId"] },
-  { table: "Genre", columns: ["GenreId", "Name"] },
-  { table: "MediaType", columns: ["MediaTypeId", "Name"] },
-  { table: "Track", columns: ["TrackId", "Name", "AlbumId", "MediaTypeId", "GenreId", "Composer", "Milliseconds", "Bytes", "UnitPrice"] },
-  { table: "Customer", columns: ["CustomerId", "FirstName", "LastName", "Country", "Email"] },
-  { table: "Invoice", columns: ["InvoiceId", "CustomerId", "InvoiceDate", "BillingCountry", "Total"] },
-  { table: "InvoiceLine", columns: ["InvoiceLineId", "InvoiceId", "TrackId", "UnitPrice", "Quantity"] },
-]
+const SCHEMAS: Record<string, { table: string; columns: string[] }[]> = {
+  chinook: [
+    { table: "Artist", columns: ["ArtistId", "Name"] },
+    { table: "Album", columns: ["AlbumId", "Title", "ArtistId"] },
+    { table: "Genre", columns: ["GenreId", "Name"] },
+    { table: "MediaType", columns: ["MediaTypeId", "Name"] },
+    { table: "Track", columns: ["TrackId", "Name", "AlbumId", "MediaTypeId", "GenreId", "Composer", "Milliseconds", "Bytes", "UnitPrice"] },
+    { table: "Playlist", columns: ["PlaylistId", "Name"] },
+    { table: "PlaylistTrack", columns: ["PlaylistId", "TrackId"] },
+    { table: "Customer", columns: ["CustomerId", "FirstName", "LastName", "Company", "Address", "City", "State", "Country", "PostalCode", "Phone", "Fax", "Email", "SupportRepId"] },
+    { table: "Employee", columns: ["EmployeeId", "LastName", "FirstName", "Title", "ReportsTo", "BirthDate", "HireDate", "Country", "Email"] },
+    { table: "Invoice", columns: ["InvoiceId", "CustomerId", "InvoiceDate", "BillingCountry", "BillingCity", "Total"] },
+    { table: "InvoiceLine", columns: ["InvoiceLineId", "InvoiceId", "TrackId", "UnitPrice", "Quantity"] },
+  ],
+  northwind: [
+    { table: "Categories", columns: ["CategoryID", "CategoryName", "Description"] },
+    { table: "Customers", columns: ["CustomerID", "CompanyName", "ContactName", "City", "Country", "Phone"] },
+    { table: "Employees", columns: ["EmployeeID", "LastName", "FirstName", "Title", "BirthDate", "HireDate", "Country", "ReportsTo"] },
+    { table: "Orders", columns: ["OrderID", "CustomerID", "EmployeeID", "OrderDate", "ShippedDate", "ShipVia", "Freight", "ShipCountry"] },
+    { table: "Order Details", columns: ["OrderID", "ProductID", "UnitPrice", "Quantity", "Discount"] },
+    { table: "Products", columns: ["ProductID", "ProductName", "SupplierID", "CategoryID", "UnitPrice", "UnitsInStock", "Discontinued"] },
+    { table: "Suppliers", columns: ["SupplierID", "CompanyName", "ContactName", "Country"] },
+    { table: "Shippers", columns: ["ShipperID", "CompanyName", "Phone"] },
+    { table: "Territories", columns: ["TerritoryID", "TerritoryDescription", "RegionID"] },
+    { table: "Regions", columns: ["RegionID", "RegionDescription"] },
+  ],
+}
 
 function diffClasses(d: string) {
   if (d === "easy") return "text-success bg-success/10"
@@ -120,8 +137,11 @@ export default function CodingSolvePage() {
 
             {tab === "tables" && (
               <div className="flex flex-col gap-2.5">
-                <p className="flex items-center gap-2 text-sm text-muted-foreground"><Table2 className="h-4 w-4 text-primary" /> Dataset <b className="text-foreground">{question.dataset}</b> · {CHINOOK_SCHEMA.length} tables, loaded in-browser.</p>
-                {CHINOOK_SCHEMA.map((t) => (
+                {(SCHEMAS[question.dataset] || []).length === 0 ? (
+                  <p className="text-sm text-muted-foreground">Schema reference isn&rsquo;t available for this question&rsquo;s dataset.</p>
+                ) : null}
+                <p className="flex items-center gap-2 text-sm text-muted-foreground"><Table2 className="h-4 w-4 text-primary" /> Dataset <b className="text-foreground">{question.dataset}</b> · {(SCHEMAS[question.dataset] || []).length} tables.</p>
+                {(SCHEMAS[question.dataset] || []).map((t) => (
                   <div key={t.table} className="overflow-hidden rounded-lg border border-border">
                     <div className="bg-muted/40 px-3 py-2 text-sm font-bold text-foreground">{t.table}</div>
                     <div className="flex flex-wrap gap-1.5 px-3 py-2">
@@ -162,9 +182,22 @@ export default function CodingSolvePage() {
           </div>
         </div>
 
-        {/* Editor */}
+        {/* Editor (SQL is live; other tracks/datasets are browsable now, solvable soon) */}
         <div className="h-[72vh] overflow-hidden rounded-xl border border-border">
-          <CodeRunner question={question} studentId={studentId} onSolved={() => setSolved(true)} />
+          {question.solvable ? (
+            <CodeRunner question={question} studentId={studentId} onSolved={() => setSolved(true)} />
+          ) : (
+            <div className="flex h-full flex-col bg-sidebar">
+              <div className="flex items-center gap-2 border-b border-sidebar-border px-3 py-2">
+                <span className="rounded-md border border-sidebar-border bg-sidebar-accent px-2.5 py-1 text-xs font-semibold text-sidebar-foreground">{question.engine.toUpperCase()}{question.dataset ? ` · ${question.dataset}` : ""}</span>
+                <span className="ml-auto inline-flex items-center gap-1.5 rounded-md bg-accent/15 px-2.5 py-1 text-xs font-semibold text-accent"><Clock3 className="h-3.5 w-3.5" /> Runner coming soon</span>
+              </div>
+              <pre className="flex-1 overflow-auto whitespace-pre-wrap px-4 py-3 font-mono text-[13px] leading-6 text-[hsl(210_30%_82%)]">{question.starter_code || "// Starter code"}</pre>
+              <div className="border-t border-sidebar-border px-4 py-3 text-xs text-sidebar-foreground/70">
+                Live today: <b className="text-white">SQL · Chinook</b>. This question&rsquo;s runner ({question.engine}{question.dataset ? ` · ${question.dataset}` : ""}) is being finalized — read the prompt, tables, and hints now; solving arrives in the next phase.
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

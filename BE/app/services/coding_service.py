@@ -62,6 +62,19 @@ def _dataset_sql(name: str) -> str:
     return path.read_text(encoding="utf-8")
 
 
+def _dataset_available(name: str) -> bool:
+    return bool(name) and (_CODING_DIR / "datasets" / f"{name}.sql").is_file()
+
+
+def is_solvable(q: dict) -> bool:
+    """A question is auto-gradable now if it's SQL and its dataset is bundled.
+
+    Other engines (pandas/pyspark via Pyodide, python via a test-runner) and
+    datasets not yet bundled are browsable-only until their phase lands.
+    """
+    return q["engine"] == "sql" and _dataset_available(q.get("dataset", ""))
+
+
 def _public(q: dict) -> dict:
     """Question shape sent to the client — never leaks the reference solution."""
     return {
@@ -73,7 +86,9 @@ def _public(q: dict) -> dict:
         "explanation_md": q.get("explanation_md", ""),
         "ordering_matters": q.get("ordering_matters", False),
         "expected_columns": q.get("expected_columns", []),
+        "expected_row_count": q.get("expected_row_count"),
         "points": _POINTS.get(q["difficulty"], 25),
+        "solvable": is_solvable(q),
     }
 
 
@@ -84,6 +99,7 @@ def _brief(q: dict) -> dict:
         "topic_tags": q.get("topic_tags", []), "role_tags": q.get("role_tags", []),
         "company_tags": q.get("company_tags", []),
         "points": _POINTS.get(q["difficulty"], 25),
+        "solvable": is_solvable(q),
     }
 
 
@@ -186,42 +202,61 @@ def _norm_row(row: tuple) -> tuple:
 
 
 def grade(slug: str, code: str) -> dict:
-    """Grade a submission by re-executing server-side and diffing vs the reference."""
+    """Grade a SQL submission by re-executing it server-side (never trusts the client).
+
+    Two modes share one shape:
+    - **row-diff** (when a question carries a `solution_sql`): strict — re-run the
+      reference and compare the full result set (columns + row multiset/sequence).
+    - **shape** (the imported PrepNPlaced bank, which ships only expected_columns +
+      expected_row_count): compare the produced columns and row count. This is the
+      deterministic ceiling that data supports; a question can be upgraded to
+      row-diff later by adding a `solution_sql`.
+    """
     q = _index().get(slug)
     if not q:
         raise QueryError("Unknown question")
 
-    exp_cols, exp_rows = _run_query(q["dataset"], q["solution_sql"], read_only=True)
     got_cols, got_rows = _run_query(q["dataset"], code, read_only=True)
-
-    ordering = q.get("ordering_matters", False)
-    exp_n = [_norm_row(r) for r in exp_rows]
     got_n = [_norm_row(r) for r in got_rows]
+    base_points = _POINTS.get(q["difficulty"], 25)
 
-    cols_match = got_cols == exp_cols
-    if ordering:
-        rows_match = got_n == exp_n
+    if q.get("solution_sql"):
+        exp_cols, exp_rows = _run_query(q["dataset"], q["solution_sql"], read_only=True)
+        exp_n = [_norm_row(r) for r in exp_rows]
+        ordering = q.get("ordering_matters", False)
+        cols_match = got_cols == exp_cols
+        rows_match = (got_n == exp_n) if ordering else (Counter(got_n) == Counter(exp_n))
+        passed = cols_match and rows_match
+        diff = None
+        if not passed:
+            exp_c, got_c = Counter(exp_n), Counter(got_n)
+            diff = {
+                "mode": "row-diff",
+                "expectedColumns": exp_cols, "gotColumns": got_cols, "columnsMatch": cols_match,
+                "expectedRowCount": len(exp_rows), "gotRowCount": len(got_rows),
+                "missingRows": [list(r) for r in list((exp_c - got_c).elements())[:20]],
+                "extraRows": [list(r) for r in list((got_c - exp_c).elements())[:20]],
+                "orderingMatters": ordering,
+            }
     else:
-        rows_match = Counter(got_n) == Counter(exp_n)
+        exp_cols = q.get("expected_columns", []) or []
+        exp_rowcount = q.get("expected_row_count")
+        cols_match = got_cols == exp_cols
+        rows_match = exp_rowcount is None or len(got_rows) == exp_rowcount
+        passed = cols_match and rows_match
+        diff = None
+        if not passed:
+            diff = {
+                "mode": "shape",
+                "expectedColumns": exp_cols, "gotColumns": got_cols, "columnsMatch": cols_match,
+                "expectedRowCount": exp_rowcount, "gotRowCount": len(got_rows),
+                "missingRows": [], "extraRows": [], "orderingMatters": q.get("ordering_matters", False),
+            }
 
-    passed = cols_match and rows_match
-    diff = None
-    if not passed:
-        exp_counter, got_counter = Counter(exp_n), Counter(got_n)
-        missing = list((exp_counter - got_counter).elements())
-        extra = list((got_counter - exp_counter).elements())
-        diff = {
-            "expectedColumns": exp_cols, "gotColumns": got_cols,
-            "columnsMatch": cols_match,
-            "expectedRowCount": len(exp_rows), "gotRowCount": len(got_rows),
-            "missingRows": [list(r) for r in missing[:20]],
-            "extraRows": [list(r) for r in extra[:20]],
-            "orderingMatters": ordering,
-        }
     return {
         "verdict": "passed" if passed else "wrong_answer",
         "diff": diff,
-        "base_points": _POINTS.get(q["difficulty"], 25),
+        "base_points": base_points,
         "got_columns": got_cols,
         "got_rows": [list(r) for r in got_rows[:_MAX_PREVIEW_ROWS]],
         "got_row_count": len(got_rows),
@@ -232,6 +267,16 @@ def grade(slug: str, code: str) -> dict:
 
 async def submit(student_id: int, slug: str, code: str, language: str) -> dict:
     """Run the grader, persist the submission, award first-solve points."""
+    q = _index().get(slug)
+    if not q:
+        raise QueryError("Unknown question")
+    if not is_solvable(q):
+        return {
+            "verdict": "not_supported", "first_solve": False, "points_awarded": 0,
+            "base_points": _POINTS.get(q["difficulty"], 25), "penalized": False, "diff": None,
+            "columns": [], "rows": [], "row_count": 0,
+            "message": f"Auto-grading for {q['engine']} on '{q['dataset'] or 'this dataset'}' is coming soon — SQL on Chinook is live today.",
+        }
     result = grade(slug, code)  # may raise QueryError (bad user SQL)
     db = get_mongodb()
     now = datetime.now(timezone.utc)

@@ -1,0 +1,102 @@
+[
+  {
+    "slug": "sql-chinook-tracks-per-genre",
+    "engine": "sql",
+    "dataset": "chinook",
+    "difficulty": "easy",
+    "title": "Track count per genre",
+    "prompt_md": "Using the **Track** and **Genre** tables in the Chinook database, count how many tracks belong to each genre.\n\nReturn exactly two columns:\n- `Name` — the genre's name\n- `TrackCount` — the number of tracks in that genre\n\nSort by `TrackCount` **descending**, then by `Name` **ascending** to break ties.",
+    "starter_code": "SELECT\n  -- g.Name AS Name,\n  -- COUNT(*) AS TrackCount\nFROM Track t\nJOIN Genre g ON t.GenreId = g.GenreId\n-- GROUP BY ...\n-- ORDER BY ...;",
+    "topic_tags": ["group-by", "joins", "aggregation"],
+    "role_tags": ["Data Analyst", "Data Engineer"],
+    "company_tags": ["Meta", "Oracle"],
+    "hints": [
+      "Join Track to Genre on GenreId so each track carries its genre name.",
+      "GROUP BY the genre, COUNT(*) the tracks, and add Name as a secondary sort key for deterministic ties."
+    ],
+    "explanation_md": "Inner-join `Track` to `Genre` on `GenreId`, group by the genre, and `COUNT(*)` the rows in each group. Sorting by count descending with `Name` ascending gives a deterministic order.",
+    "ordering_matters": true,
+    "expected_columns": ["Name", "TrackCount"],
+    "solution_sql": "SELECT g.Name AS Name, COUNT(*) AS TrackCount FROM Track t JOIN Genre g ON t.GenreId = g.GenreId GROUP BY g.GenreId ORDER BY TrackCount DESC, Name ASC;"
+  },
+  {
+    "slug": "sql-chinook-five-longest-tracks",
+    "engine": "sql",
+    "dataset": "chinook",
+    "difficulty": "easy",
+    "title": "Five longest tracks",
+    "prompt_md": "From the **Track** table, find the five longest tracks by duration.\n\nReturn exactly two columns:\n- `Name` — the track name\n- `Milliseconds` — its duration in milliseconds\n\nSort by `Milliseconds` **descending**, breaking ties by `Name` **ascending**, and return only the top 5 rows.",
+    "starter_code": "SELECT Name, Milliseconds\nFROM Track\n-- ORDER BY ...\n-- LIMIT ...;",
+    "topic_tags": ["order-by", "limit"],
+    "role_tags": ["Data Analyst"],
+    "company_tags": ["Amazon", "Flipkart"],
+    "hints": [
+      "ORDER BY Milliseconds DESC puts the longest first.",
+      "Use LIMIT 5, and add Name ASC as a tie-breaker so the order is stable."
+    ],
+    "explanation_md": "Order the tracks by `Milliseconds` descending (with `Name` as a deterministic tie-breaker) and keep only the first five rows with `LIMIT 5`.",
+    "ordering_matters": true,
+    "expected_columns": ["Name", "Milliseconds"],
+    "solution_sql": "SELECT Name, Milliseconds FROM Track ORDER BY Milliseconds DESC, Name ASC LIMIT 5;"
+  },
+  {
+    "slug": "sql-chinook-invoices-per-country",
+    "engine": "sql",
+    "dataset": "chinook",
+    "difficulty": "easy",
+    "title": "Invoices per billing country",
+    "prompt_md": "Using the **Invoice** table, count how many invoices were billed to each country.\n\nReturn exactly two columns:\n- `Country` — the value of `BillingCountry`\n- `InvoiceCount` — the number of invoices billed to that country\n\nSort by `InvoiceCount` **descending**, then by `Country` **ascending** to break ties.",
+    "starter_code": "SELECT\n  -- BillingCountry AS Country,\n  -- COUNT(*) AS InvoiceCount\nFROM Invoice\n-- GROUP BY ...\n-- ORDER BY ...;",
+    "topic_tags": ["group-by", "aggregation"],
+    "role_tags": ["Data Engineer"],
+    "company_tags": ["Oracle", "Walmart"],
+    "hints": [
+      "GROUP BY BillingCountry and COUNT(*) to tally invoices per country.",
+      "Add Country as a secondary ascending sort key for a deterministic order."
+    ],
+    "explanation_md": "Group invoices by `BillingCountry` and `COUNT(*)` per group. Sort by the count descending with `Country` ascending as a tie-breaker.",
+    "ordering_matters": true,
+    "expected_columns": ["Country", "InvoiceCount"],
+    "solution_sql": "SELECT BillingCountry AS Country, COUNT(*) AS InvoiceCount FROM Invoice GROUP BY BillingCountry ORDER BY InvoiceCount DESC, Country ASC;"
+  },
+  {
+    "slug": "sql-chinook-spend-per-customer",
+    "engine": "sql",
+    "dataset": "chinook",
+    "difficulty": "medium",
+    "title": "Total spend per customer",
+    "prompt_md": "The finance team wants each customer's lifetime spend. Join **Customer** to **Invoice** and sum each customer's invoice totals.\n\nReturn exactly two columns:\n- `Customer` — the customer's full name as `FirstName || ' ' || LastName`\n- `TotalSpent` — the sum of that customer's `Invoice.Total`, rounded to 2 decimals\n\nSort by `TotalSpent` **descending**, then by `Customer` **ascending**. Only include customers who have at least one invoice.",
+    "starter_code": "SELECT\n  c.FirstName || ' ' || c.LastName AS Customer,\n  -- ROUND(SUM(...), 2) AS TotalSpent\nFROM Customer c\nJOIN Invoice i ON i.CustomerId = c.CustomerId\n-- GROUP BY ...\n-- ORDER BY ...;",
+    "topic_tags": ["joins", "group-by", "aggregation"],
+    "role_tags": ["Analytics Engineer"],
+    "company_tags": ["Intuit", "Target"],
+    "hints": [
+      "An inner join to Invoice naturally drops customers with no invoices.",
+      "Concatenate the name with || , SUM(i.Total), and ROUND(..., 2)."
+    ],
+    "explanation_md": "Inner-join `Customer` to `Invoice` (which drops customers with no invoices), group by the customer, and `SUM(Total)` rounded to two decimals. Concatenate the name for the label.",
+    "ordering_matters": true,
+    "expected_columns": ["Customer", "TotalSpent"],
+    "solution_sql": "SELECT c.FirstName || ' ' || c.LastName AS Customer, ROUND(SUM(i.Total), 2) AS TotalSpent FROM Customer c JOIN Invoice i ON i.CustomerId = c.CustomerId GROUP BY c.CustomerId ORDER BY TotalSpent DESC, Customer ASC;"
+  },
+  {
+    "slug": "sql-chinook-artists-two-plus-albums",
+    "engine": "sql",
+    "dataset": "chinook",
+    "difficulty": "medium",
+    "title": "Artists with two or more albums",
+    "prompt_md": "Using the **Album** and **Artist** tables, find every artist who has released **at least two** albums.\n\nReturn exactly two columns:\n- `Name` — the artist's name\n- `AlbumCount` — how many albums they have\n\nSort by `AlbumCount` **descending**, then by `Name` **ascending**.",
+    "starter_code": "SELECT\n  ar.Name AS Name,\n  COUNT(*) AS AlbumCount\nFROM Album al\nJOIN Artist ar ON al.ArtistId = ar.ArtistId\n-- GROUP BY ...\n-- HAVING ...\n-- ORDER BY ...;",
+    "topic_tags": ["joins", "group-by", "having"],
+    "role_tags": ["Data Engineer"],
+    "company_tags": ["Atlassian", "Airbnb"],
+    "hints": [
+      "Filtering on COUNT(*) needs HAVING, not WHERE.",
+      "GROUP BY the artist and keep groups where COUNT(*) >= 2."
+    ],
+    "explanation_md": "Join `Album` to `Artist`, group by the artist, and keep only groups whose `COUNT(*) >= 2` using `HAVING` (you can't filter an aggregate in `WHERE`).",
+    "ordering_matters": true,
+    "expected_columns": ["Name", "AlbumCount"],
+    "solution_sql": "SELECT ar.Name AS Name, COUNT(*) AS AlbumCount FROM Album al JOIN Artist ar ON al.ArtistId = ar.ArtistId GROUP BY ar.ArtistId HAVING COUNT(*) >= 2 ORDER BY AlbumCount DESC, Name ASC;"
+  }
+]

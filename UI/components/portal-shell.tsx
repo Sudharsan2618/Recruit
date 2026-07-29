@@ -6,17 +6,19 @@ import dynamic from "next/dynamic"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import type { LucideIcon } from "lucide-react"
-import { Menu, X, LogOut } from "lucide-react"
+import { Menu, X, LogOut, PanelLeft } from "lucide-react"
 import { Logo } from "@/components/logo"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { useAuth } from "@/lib/auth-context"
 
 const NotificationInbox = dynamic(() => import("@/components/notification-inbox"), {
   ssr: false,
   loading: () => <div className="h-5 w-5" />,
 })
+
+const COLLAPSE_KEY = "skillbridge:sidebar-collapsed"
 
 interface NavItem {
   label: string
@@ -35,20 +37,54 @@ interface PortalShellProps {
 export function PortalShell({ children, portalName, navItems, portalColor, showNotifications = true }: PortalShellProps) {
   const pathname = usePathname()
   const [mobileOpen, setMobileOpen] = useState(false)
+  const [collapsed, setCollapsed] = useState(false)
   const { logout } = useAuth()
+
+  // Restore persisted collapse state after mount (avoids SSR hydration mismatch)
+  useEffect(() => {
+    try {
+      if (localStorage.getItem(COLLAPSE_KEY) === "1") setCollapsed(true)
+    } catch {
+      /* ignore */
+    }
+  }, [])
+
+  function toggleCollapsed() {
+    setCollapsed((v) => {
+      const next = !v
+      try {
+        localStorage.setItem(COLLAPSE_KEY, next ? "1" : "0")
+      } catch {
+        /* ignore */
+      }
+      return next
+    })
+  }
 
   return (
     <div className="flex h-screen overflow-hidden">
       {/* Desktop Sidebar */}
-      <aside className="hidden w-64 flex-col border-r border-sidebar-border bg-sidebar lg:flex">
-        <div className="flex h-16 items-center gap-2 border-b border-sidebar-border px-6">
+      <aside
+        className={cn(
+          "hidden flex-col border-r border-sidebar-border bg-sidebar transition-[width] duration-200 ease-out lg:flex",
+          collapsed ? "w-[68px]" : "w-64"
+        )}
+      >
+        <div
+          className={cn(
+            "flex h-16 items-center border-b border-sidebar-border",
+            collapsed ? "justify-center px-0" : "gap-2 px-6"
+          )}
+        >
           <Logo size={32} />
-          <div>
-            <span className="text-sm font-bold text-sidebar-foreground">SkillBridge</span>
-            <p className="text-xs text-sidebar-foreground/60">{portalName}</p>
-          </div>
+          {!collapsed && (
+            <div className="min-w-0">
+              <span className="block text-sm font-bold text-sidebar-foreground">SkillBridge</span>
+              <p className="truncate text-xs text-sidebar-foreground/60">{portalName}</p>
+            </div>
+          )}
         </div>
-        <nav className="flex-1 overflow-y-auto px-3 py-4">
+        <nav className="flex-1 overflow-y-auto overflow-x-hidden px-3 py-4">
           <ul className="flex flex-col gap-1">
             {navItems.map((item) => {
               const isActive = pathname === item.href
@@ -56,15 +92,17 @@ export function PortalShell({ children, portalName, navItems, portalColor, showN
                 <li key={item.href}>
                   <Link
                     href={item.href}
+                    title={collapsed ? item.label : undefined}
                     className={cn(
-                      "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
+                      "flex items-center rounded-lg py-2.5 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring",
+                      collapsed ? "justify-center px-0" : "gap-3 px-3",
                       isActive
                         ? "bg-sidebar-accent text-sidebar-accent-foreground"
                         : "text-sidebar-foreground/70 hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground"
                     )}
                   >
                     <item.icon className="h-4 w-4 shrink-0" />
-                    {item.label}
+                    {!collapsed && <span className="truncate">{item.label}</span>}
                   </Link>
                 </li>
               )
@@ -74,10 +112,14 @@ export function PortalShell({ children, portalName, navItems, portalColor, showN
         <div className="border-t border-sidebar-border px-3 py-3">
           <button
             onClick={logout}
-            className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground"
+            title={collapsed ? "Log Out" : undefined}
+            className={cn(
+              "flex w-full items-center rounded-lg py-2.5 text-sm font-medium text-sidebar-foreground/70 transition-colors hover:bg-sidebar-accent/50 hover:text-sidebar-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring",
+              collapsed ? "justify-center px-0" : "gap-3 px-3"
+            )}
           >
-            <LogOut className="h-4 w-4" />
-            Log Out
+            <LogOut className="h-4 w-4 shrink-0" />
+            {!collapsed && "Log Out"}
           </button>
         </div>
       </aside>
@@ -145,8 +187,21 @@ export function PortalShell({ children, portalName, navItems, portalColor, showN
           <span className="text-sm font-semibold text-foreground flex-1">{portalName}</span>
           {showNotifications && <NotificationInbox />}
         </header>
-        {/* Desktop top bar with notifications */}
-        <header className="hidden lg:flex h-14 items-center justify-end border-b border-border bg-card px-6">
+        {/* Desktop top bar: collapse toggle + portal name, notifications right */}
+        <header className="hidden lg:flex h-14 items-center justify-between border-b border-border bg-card px-4">
+          <div className="flex items-center gap-2">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={toggleCollapsed}
+              aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+              aria-pressed={collapsed}
+              className="h-9 w-9"
+            >
+              <PanelLeft className="h-5 w-5" />
+            </Button>
+            <span className="text-sm font-semibold text-foreground">{portalName}</span>
+          </div>
           {showNotifications && <NotificationInbox />}
         </header>
         <main className="flex-1 overflow-y-auto bg-background p-3 sm:p-4 lg:p-6">

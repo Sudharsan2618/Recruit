@@ -17,11 +17,13 @@ import {
   Share2,
   Award,
   GraduationCap,
+  Code2,
 } from "lucide-react"
 
 const studentNav = [
   { label: "Dashboard", href: "/student", icon: LayoutDashboard },
   { label: "Course Catalog", href: "/student/courses", icon: BookOpen },
+  { label: "Coding Practice", href: "/student/coding", icon: Code2 },
   { label: "Live Webinars", href: "/student/webinars", icon: Video },
   { label: "Materials Library", href: "/student/materials", icon: FolderOpen },
   { label: "Job Board", href: "/student/jobs", icon: Briefcase },

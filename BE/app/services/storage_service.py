@@ -126,6 +126,29 @@ def upload_resume(
     return file_url
 
 
+def download_resume_bytes(file_url: str) -> Optional[bytes]:
+    """
+    Download a stored resume PDF's bytes from its GCS URL.
+
+    Used to backfill resume text for analyses created before the text was
+    persisted. Returns None for non-GCS/placeholder URLs or missing blobs.
+    """
+    prefix = f"https://storage.googleapis.com/{settings.GCS_BUCKET_NAME}/"
+    if not file_url or not file_url.startswith(prefix):
+        return None
+    blob_name = file_url[len(prefix):]
+    try:
+        bucket = _get_bucket()
+        blob = bucket.blob(blob_name)
+        if not blob.exists():
+            return None
+        return blob.download_as_bytes()
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning(f"Resume download failed for {file_url}: {e}")
+        return None
+
+
 def get_resume_url(student_id: int) -> Optional[str]:
     """
     Get the latest resume URL for a student by listing their resume folder.

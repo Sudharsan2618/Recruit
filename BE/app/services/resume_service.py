@@ -106,6 +106,7 @@ async def analyze_resume(
         "file_url": file_url,
         "analyzed_at": now,
         "extracted_data": extracted_data,
+        "resume_text": resume_text[:20000],  # retained so the Score Report can re-score without re-upload
         "resume_text_length": len(resume_text),
         "match_score_ready": True,
     }
@@ -137,3 +138,15 @@ async def get_resume_analysis(student_id: int) -> Optional[dict]:
         {"_id": 0},
     )
     return doc
+
+
+async def backfill_resume_text(student_id: int, resume_text: str) -> None:
+    """Persist resume_text onto an existing analysis doc that predates text storage."""
+    db = get_mongodb()
+    await db["resume_analysis"].update_one(
+        {"student_id": student_id},
+        {"$set": {
+            "resume_text": resume_text[:20000],
+            "resume_text_length": len(resume_text),
+        }},
+    )

@@ -307,6 +307,121 @@ export interface ResumeAnalysis {
   match_score_ready: boolean;
 }
 
+// ── Resume Score Report ────────────────────────────────────────────────────
+
+export type HiringDecision = "advance" | "interview" | "hold" | "reject";
+export type HiringConfidence = "low" | "medium" | "high";
+
+export interface ScoreBreakdown {
+  match_score: number;
+  ats_score: number;
+  skills_score: number;
+  experience_score: number;
+}
+
+export interface HiringIntelligence {
+  decision: HiringDecision;
+  confidence: HiringConfidence;
+  market_position: string;
+}
+
+export interface TitledPoint {
+  title: string;
+  detail: string;
+}
+
+export interface SkillIntelligence {
+  exact_matches: string[];
+  missing: string[];
+  transferable_summary: string;
+}
+
+export interface RewriteSuggestion {
+  before: string;
+  after: string;
+  reason: string;
+}
+
+export interface CoachingItem {
+  question: string;
+  guidance: string;
+}
+
+export interface WeeklyPlanItem {
+  label: string;
+  focus: string;
+  detail: string;
+}
+
+export interface DailyPlanItem {
+  label: string;
+  task: string;
+}
+
+export interface ImprovementPlan {
+  weekly: WeeklyPlanItem[];
+  daily: DailyPlanItem[];
+}
+
+export interface InterviewRisk {
+  risks: TitledPoint[];
+  mitigations: string[];
+  closing_advice: string;
+}
+
+export interface ReportMeta {
+  target_role: string;
+  seniority: string | null;
+  industry: string | null;
+  job_id: number | null;
+  job_title: string | null;
+  company_name: string | null;
+  generated_at: string | null;
+}
+
+export interface ResumeScoreReport {
+  meta: ReportMeta;
+  verdict_summary: string;
+  scores: ScoreBreakdown;
+  hiring_intelligence: HiringIntelligence;
+  core_strengths: TitledPoint[];
+  critical_gaps: TitledPoint[];
+  skill_intelligence: SkillIntelligence;
+  ats_keywords: string[];
+  rewrite_suggestions: RewriteSuggestion[];
+  interview_coaching: CoachingItem[];
+  improvement_plan: ImprovementPlan;
+  interview_risk: InterviewRisk;
+}
+
+export interface ResumeRef {
+  file_url: string | null;
+  file_name: string | null;
+  analyzed_at?: string | null;
+}
+
+export interface ResumeReportRun {
+  report_id: string;
+  student_id: number;
+  target_key: string;
+  generated_at: string;
+  resume_ref?: ResumeRef;
+  report: ResumeScoreReport;
+}
+
+export interface ResumeReportDoc {
+  student_id: number;
+  target_key: string;
+  generated_at: string;
+  report: ResumeScoreReport;
+}
+
+export interface ScoreTarget {
+  role: string;
+  seniority?: string | null;
+  industry?: string | null;
+}
+
 export interface StudentProfile {
   user_id: number;
   email: string;

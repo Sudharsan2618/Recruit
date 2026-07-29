@@ -17,6 +17,7 @@ import {
   Share2,
   Award,
   GraduationCap,
+  ScanSearch,
   Code2,
 } from "lucide-react"
 
@@ -27,6 +28,7 @@ const studentNav = [
   { label: "Live Webinars", href: "/student/webinars", icon: Video },
   { label: "Materials Library", href: "/student/materials", icon: FolderOpen },
   { label: "Job Board", href: "/student/jobs", icon: Briefcase },
+  { label: "Resume Score", href: "/student/resume", icon: ScanSearch },
   { label: "Mentors", href: "/student/mentors", icon: UserCheck },
   { label: "Referrals", href: "/student/referrals", icon: Share2 },
   { label: "Certificates", href: "/student/certificates", icon: Award },

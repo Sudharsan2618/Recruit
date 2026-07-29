@@ -96,6 +96,9 @@ def notification_queue():
 def resume_analysis():
     return get_mongodb()["resume_analysis"]
 
+def resume_reports():
+    return get_mongodb()["resume_reports"]
+
 
 # ── Index creation (run once on first deploy) ──────────────────────────────
 
@@ -164,6 +167,19 @@ async def ensure_indexes() -> None:
     # resume_analysis
     ra = db["resume_analysis"]
     await ra.create_index([("student_id", 1)], unique=True)
+
+    # resume_reports — every run is kept as its own version (history)
+    rr = db["resume_reports"]
+    # Migration: earlier builds created a UNIQUE (student_id, target_key) index
+    # that blocked storing history. Drop it so every run can be appended.
+    try:
+        for name, spec in (await rr.index_information()).items():
+            if spec.get("unique") and spec.get("key") == [("student_id", 1), ("target_key", 1)]:
+                await rr.drop_index(name)
+    except Exception:
+        pass
+    await rr.create_index([("student_id", 1), ("generated_at", -1)])
+    await rr.create_index([("student_id", 1), ("target_key", 1)])
 
     print("[MONGO] Indexes ensured")
 

@@ -27,6 +27,7 @@ from app.schemas.tracking import (
     CourseEngagementSummary,
     XAPIStatementRequest,
 )
+from app.schemas.resume_report import ScoreRequest
 
 
 router = APIRouter(prefix="/tracking", tags=["Learning Analytics & xAPI"])
@@ -384,6 +385,124 @@ async def get_resume(student_id: int):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Resume fetch failed: {e}")
+
+
+@router.post(
+    "/resume/score",
+    summary="Score a resume against a target job or role",
+    description="Runs the full Resume Score Report (match/ATS/skills/experience, hiring intelligence, "
+                "strengths, gaps, skill intelligence, ATS keywords, coaching, plan, risk) against a chosen "
+                "Job (job_id) or a manual target role. Reuses the stored resume text — no re-upload needed.",
+)
+async def score_resume_endpoint(
+    body: ScoreRequest,
+    student_id: int = Query(..., description="Student ID"),
+):
+    try:
+        # 1. Load the stored resume text (persisted on upload)
+        from app.services.resume_service import (
+            get_resume_analysis, extract_text_from_pdf, backfill_resume_text,
+        )
+        analysis = await get_resume_analysis(student_id)
+        resume_text = (analysis or {}).get("resume_text")
+
+        # Fallback: analyses created before resume_text was persisted still have
+        # a file_url — re-download the PDF, re-extract, and backfill for next time.
+        if not resume_text and analysis and analysis.get("file_url"):
+            try:
+                from app.services.storage_service import download_resume_bytes
+                file_bytes = download_resume_bytes(analysis["file_url"])
+                if file_bytes:
+                    extracted = extract_text_from_pdf(file_bytes)
+                    if extracted.strip():
+                        resume_text = extracted
+                        await backfill_resume_text(student_id, extracted)
+            except Exception as backfill_err:
+                import logging
+                logging.getLogger(__name__).warning(
+                    f"Resume text backfill failed for student {student_id}: {backfill_err}"
+                )
+
+        if not resume_text:
+            has_file = bool(analysis and analysis.get("file_url"))
+            detail = (
+                "Couldn't read the text from your saved resume. Please re-upload your resume."
+                if has_file else
+                "No resume on file. Upload and analyze a resume first."
+            )
+            raise HTTPException(status_code=400, detail=detail)
+
+        # 2. Build the target context (a Job on the board, or a manual role)
+        from app.services.resume_score_service import (
+            normalize_job_target, normalize_manual_target, score_resume,
+        )
+        if body.job_id:
+            from app.db.postgres import async_session_factory
+            from app.services.matching_service import MatchingService
+            async with async_session_factory() as session:
+                svc = MatchingService(session)
+                job = await svc.get_job_detail(body.job_id, student_id=student_id)
+            if not job:
+                raise HTTPException(status_code=404, detail="Job not found")
+            ctx = normalize_job_target(job)
+        elif body.target:
+            ctx = normalize_manual_target(body.target.model_dump())
+        else:
+            raise HTTPException(status_code=400, detail="Provide either job_id or a target role.")
+
+        # Capture which resume this run scored (metadata for history)
+        file_url = (analysis or {}).get("file_url") or ""
+        raw_name = file_url.split("/")[-1] if file_url else ""
+        # Strip the "YYYYMMDD_HHMMSS_" GCS prefix if present
+        parts = raw_name.split("_")
+        file_name = "_".join(parts[2:]) if len(parts) > 2 and parts[0].isdigit() else raw_name
+        resume_ref = {
+            "file_url": file_url or None,
+            "file_name": file_name or None,
+            "analyzed_at": (analysis or {}).get("analyzed_at"),
+        }
+
+        result = await score_resume(student_id, resume_text, ctx, resume_ref=resume_ref)
+        return {"success": True, "report_id": result["report_id"], "report": result["report"]}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Resume scoring failed: {e}")
+
+
+@router.get(
+    "/resume/{student_id}/report",
+    summary="Get the latest resume score report for a student",
+)
+async def get_resume_report(
+    student_id: int,
+    job_id: Optional[int] = Query(None, description="Filter to a specific job's report"),
+):
+    try:
+        from app.services.resume_score_service import get_latest_report
+        doc = await get_latest_report(student_id, job_id=job_id)
+        if not doc:
+            raise HTTPException(status_code=404, detail="No score report found")
+        return doc
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Report fetch failed: {e}")
+
+
+@router.get(
+    "/resume/{student_id}/reports",
+    summary="List a student's resume score-report history (newest first)",
+)
+async def list_resume_reports(
+    student_id: int,
+    limit: int = Query(25, ge=1, le=100),
+):
+    try:
+        from app.services.resume_score_service import list_reports
+        return {"reports": await list_reports(student_id, limit=limit)}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Report history fetch failed: {e}")
 
 
 # ══════════════════════════════════════════════════════════════════════════

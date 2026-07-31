@@ -3,10 +3,15 @@
 import os
 from datetime import timedelta
 from typing import Optional
+import google.auth
 from google.cloud import storage
 from google.oauth2 import service_account
 from google.auth.transport import requests as google_auth_requests
 from app.config import settings
+
+# Scope required to call the IAM Credentials signBlob API used for keyless
+# V4 URL signing on Cloud Run / GCE.
+_IAM_SIGN_SCOPES = ["https://www.googleapis.com/auth/cloud-platform"]
 
 _gcs_client: Optional[storage.Client] = None
 
@@ -51,14 +56,17 @@ def _signing_credentials_kwargs(client: storage.Client) -> dict:
         return {}
 
     # Token-only credentials (compute_engine / impersonated / default on GCE):
-    # sign via IAM signBlob. Refresh to ensure a valid token + resolved email.
-    creds.refresh(google_auth_requests.Request())
-    email = getattr(creds, "service_account_email", None) or getattr(
-        creds, "signer_email", None
+    # sign via the IAM signBlob API. The storage client's own token is scoped
+    # only for storage, but signBlob lives on iamcredentials.googleapis.com and
+    # requires the cloud-platform scope — so mint a separately-scoped token.
+    signing_creds, _ = google.auth.default(scopes=_IAM_SIGN_SCOPES)
+    signing_creds.refresh(google_auth_requests.Request())
+    email = getattr(signing_creds, "service_account_email", None) or getattr(
+        signing_creds, "signer_email", None
     )
     return {
         "service_account_email": email,
-        "access_token": creds.token,
+        "access_token": signing_creds.token,
     }
 
 

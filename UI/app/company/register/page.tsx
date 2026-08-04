@@ -54,7 +54,7 @@ export default function CompanyRegisterPage() {
               <Building2 className="h-6 w-6 text-accent-foreground" />
             </div>
             <div>
-              <p className="text-sm font-semibold text-muted-foreground">SkillBridge</p>
+              <p className="text-sm font-semibold text-muted-foreground">CompanionLMS</p>
               <h1 className="text-2xl font-bold text-foreground">Register Your Company</h1>
             </div>
           </div>

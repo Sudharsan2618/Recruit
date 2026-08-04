@@ -7,7 +7,7 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import type { LucideIcon } from "lucide-react"
 import { Menu, X, LogOut, PanelLeft } from "lucide-react"
-import { Logo } from "@/components/logo"
+import { Logo, LogoFull } from "@/components/logo"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 import { useState, useEffect } from "react"
@@ -76,11 +76,12 @@ export function PortalShell({ children, portalName, navItems, portalColor, showN
             collapsed ? "justify-center px-0" : "gap-2 px-6"
           )}
         >
-          <Logo size={32} />
-          {!collapsed && (
+          {collapsed ? (
+            <Logo size={32} />
+          ) : (
             <div className="min-w-0">
-              <span className="block text-sm font-bold text-sidebar-foreground">SkillBridge</span>
-              <p className="truncate text-xs text-sidebar-foreground/60">{portalName}</p>
+              <LogoFull height={26} priority />
+              <p className="mt-1 truncate text-xs text-sidebar-foreground/60">{portalName}</p>
             </div>
           )}
         </div>
@@ -130,10 +131,7 @@ export function PortalShell({ children, portalName, navItems, portalColor, showN
           <div className="absolute inset-0 bg-foreground/50" onClick={() => setMobileOpen(false)} role="presentation" />
           <aside className="absolute left-0 top-0 flex h-full w-64 flex-col bg-sidebar shadow-xl">
             <div className="flex h-16 items-center justify-between border-b border-sidebar-border px-6">
-              <div className="flex items-center gap-2">
-                <Logo size={32} />
-                <span className="text-sm font-bold text-sidebar-foreground">SkillBridge</span>
-              </div>
+              <LogoFull height={26} />
               <Button variant="ghost" size="icon" onClick={() => setMobileOpen(false)} className="text-sidebar-foreground">
                 <X className="h-5 w-5" />
                 <span className="sr-only">Close menu</span>

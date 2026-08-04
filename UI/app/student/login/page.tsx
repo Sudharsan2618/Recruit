@@ -42,7 +42,7 @@ export default function StudentLoginPage() {
           <div className="flex items-center gap-3">
             <Logo size={48} />
             <div>
-              <p className="text-sm font-semibold text-muted-foreground">SkillBridge</p>
+              <p className="text-sm font-semibold text-muted-foreground">CompanionLMS</p>
               <h1 className="text-2xl font-bold text-foreground">Student Portal</h1>
             </div>
           </div>

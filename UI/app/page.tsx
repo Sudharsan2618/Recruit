@@ -3,7 +3,7 @@
 import { useState } from "react"
 import Link from "next/link"
 import { BookOpen, Briefcase, Users, ArrowRight, BarChart3, GraduationCap, Building2, CheckCircle, ShieldCheck, Menu, X } from "lucide-react"
-import { Logo } from "@/components/logo"
+import { LogoFull } from "@/components/logo"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 
@@ -14,8 +14,7 @@ function Navbar() {
     <header className="sticky top-0 z-50 border-b border-border bg-card/80 backdrop-blur-md">
       <nav className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3 sm:px-6 sm:py-4">
         <Link href="/" className="flex items-center gap-2">
-          <Logo size={36} />
-          <span className="text-lg font-bold text-foreground sm:text-xl">SkillBridge</span>
+          <LogoFull height={34} priority />
         </Link>
         <div className="hidden items-center gap-8 md:flex">
           <Link href="#features" className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground">Features</Link>
@@ -66,7 +65,7 @@ function HeroSection() {
             Learn Skills.<br />Land Careers.
           </h1>
           <p className="mx-auto mt-4 max-w-2xl text-pretty text-base leading-relaxed text-muted-foreground sm:mt-6 sm:text-lg">
-            SkillBridge combines world-class courses with direct access to top employers. Master in-demand skills through SCORM-compliant content and get matched with opportunities that fit your profile.
+            CompanionLMS combines world-class courses with direct access to top employers. Master in-demand skills through SCORM-compliant content and get matched with opportunities that fit your profile.
           </p>
           <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:mt-10 sm:flex-row sm:gap-4">
             <Button size="lg" asChild className="gap-2">
@@ -237,8 +236,7 @@ function Footer() {
           {/* Brand */}
           <div className="col-span-2 md:col-span-1">
             <div className="flex items-center gap-2">
-              <Logo size={32} />
-              <span className="font-bold text-foreground">SkillBridge</span>
+              <LogoFull height={30} />
             </div>
             <p className="mt-3 text-sm leading-relaxed text-muted-foreground">
               Bridging the gap between learning and employment with industry-standard course delivery.
@@ -279,7 +277,7 @@ function Footer() {
         {/* Bottom bar */}
         <div className="mt-12 flex flex-col items-center justify-between gap-3 border-t border-border pt-6 md:flex-row">
           <p className="text-xs text-muted-foreground">
-            &copy; {new Date().getFullYear()} SkillBridge. Built with SCORM, xAPI &amp; LTI standards.
+            &copy; {new Date().getFullYear()} CompanionLMS. Built with SCORM, xAPI &amp; LTI standards.
           </p>
           <Link
             href="/admin/login"

@@ -46,7 +46,7 @@ export default function ForgotPasswordPage() {
       <div className="mx-auto flex min-h-screen max-w-md flex-col items-center justify-center px-4 py-8">
         <div className="mb-8 flex items-center gap-2">
           <Logo size={36} />
-          <span className="text-lg font-bold text-foreground">SkillBridge</span>
+          <span className="text-lg font-bold text-foreground">CompanionLMS</span>
         </div>
 
         <Card className="w-full">

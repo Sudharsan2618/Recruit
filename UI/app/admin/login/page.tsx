@@ -43,7 +43,7 @@ export default function AdminLoginPage() {
               <ShieldCheck className="h-6 w-6 text-primary-foreground" />
             </div>
             <div>
-              <p className="text-sm font-semibold text-muted-foreground">SkillBridge</p>
+              <p className="text-sm font-semibold text-muted-foreground">CompanionLMS</p>
               <h1 className="text-2xl font-bold text-foreground">Admin Portal</h1>
             </div>
           </div>

@@ -67,12 +67,19 @@ def setup_bucket():
     bucket.cors = [
         {
             "origin": [
-                settings.FRONTEND_URL,
+                settings.FRONTEND_URL.rstrip("/"),
                 "http://localhost:3000",
                 "http://localhost:3001",
             ],
-            "method": ["GET", "HEAD"],
-            "responseHeader": ["Content-Type", "Content-Length"],
+            # PUT/OPTIONS are required for direct-to-GCS browser uploads via
+            # signed URLs; GET/HEAD serve the assets afterwards.
+            "method": ["GET", "HEAD", "PUT", "OPTIONS"],
+            "responseHeader": [
+                "Content-Type",
+                "Content-Length",
+                "ETag",
+                "x-goog-resumable",
+            ],
             "maxAgeSeconds": 3600,
         }
     ]

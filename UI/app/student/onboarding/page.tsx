@@ -141,7 +141,7 @@ export default function StudentOnboardingPage() {
         <div className="flex items-center gap-3 mb-8">
           <Logo size={40} />
           <div>
-            <p className="text-xs font-semibold text-muted-foreground">SkillBridge</p>
+            <p className="text-xs font-semibold text-muted-foreground">CompanionLMS</p>
             <h1 className="text-lg font-bold text-foreground">
               Welcome, {user?.first_name}! Let&apos;s set up your profile
             </h1>

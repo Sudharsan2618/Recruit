@@ -6,7 +6,33 @@ import { X } from 'lucide-react'
 
 import { cn } from '@/lib/utils'
 
-const Dialog = DialogPrimitive.Root
+const Dialog = ({
+  onOpenChange,
+  ...props
+}: React.ComponentProps<typeof DialogPrimitive.Root>) => (
+  <DialogPrimitive.Root
+    onOpenChange={(open) => {
+      onOpenChange?.(open)
+      // Radix (@radix-ui/react-dialog 1.1.x) can leave `pointer-events: none`
+      // stuck on <body> after a dialog that contained a Select/Dropdown closes.
+      // This blocks every click on the page (e.g. the wizard "Next" button)
+      // until a re-layout such as a window resize clears it. Proactively reset
+      // it once the close animation has settled, unless another Radix overlay
+      // is still open (which legitimately needs the scroll-lock).
+      if (!open && typeof document !== 'undefined') {
+        setTimeout(() => {
+          const overlayStillOpen = document.querySelector(
+            '[role="dialog"][data-state="open"], [data-radix-popper-content-wrapper]',
+          )
+          if (!overlayStillOpen && document.body.style.pointerEvents === 'none') {
+            document.body.style.pointerEvents = ''
+          }
+        }, 300)
+      }
+    }}
+    {...props}
+  />
+)
 
 const DialogTrigger = DialogPrimitive.Trigger
 

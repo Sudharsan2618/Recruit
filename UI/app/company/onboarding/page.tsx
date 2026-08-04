@@ -120,7 +120,7 @@ export default function CompanyOnboardingPage() {
             <Building2 className="h-5 w-5 text-accent-foreground" />
           </div>
           <div>
-            <p className="text-xs font-semibold text-muted-foreground">SkillBridge</p>
+            <p className="text-xs font-semibold text-muted-foreground">CompanionLMS</p>
             <h1 className="text-lg font-bold text-foreground">
               Welcome, {user?.company_name}! Let&apos;s complete your profile
             </h1>

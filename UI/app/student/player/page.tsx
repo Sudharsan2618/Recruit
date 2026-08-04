@@ -48,6 +48,8 @@ import {
   Save,
   Award,
   Star,
+  Image as ImageIcon,
+  Music,
 } from "lucide-react"
 import Link from "next/link"
 import { 
@@ -89,6 +91,8 @@ const contentTypeIcons: Record<string, React.ElementType> = {
   text: BookOpen,
   quiz: HelpCircle,
   pdf: FileText,
+  image: ImageIcon,
+  audio: Music,
 }
 
 // ── Watched-range helpers (unique seconds tracking) ──
@@ -1594,8 +1598,48 @@ export default function CoursePlayer() {
                     </div>
                   )}
 
+                  {/* Image content */}
+                  {currentLesson?.content_type === "image" && currentLesson?.content_url && (
+                    <div className="flex-1 flex flex-col items-center justify-center bg-muted/30 p-4 sm:p-8 min-h-[400px]">
+                      <img
+                        src={currentLesson.content_url}
+                        alt={currentLesson.title}
+                        className="max-h-[70vh] max-w-full rounded-lg border border-border object-contain shadow-sm"
+                        onLoad={() => {
+                          if (currentLesson && !completedLessons.has(currentLesson.lesson_id)) {
+                            markLessonCompleted(currentLesson.lesson_id)
+                          }
+                        }}
+                      />
+                    </div>
+                  )}
+
+                  {/* Audio content */}
+                  {currentLesson?.content_type === "audio" && currentLesson?.content_url && (
+                    <div className="flex-1 flex flex-col items-center justify-center bg-muted/30 p-8 min-h-[400px]">
+                      <div className="w-full max-w-lg space-y-6 text-center">
+                        <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-primary/10 border border-primary/20 mx-auto">
+                          <Music className="h-7 w-7 text-primary" />
+                        </div>
+                        <h2 className="text-xl font-bold text-foreground">{currentLesson.title}</h2>
+                        <audio
+                          key={`audio-${currentLesson.lesson_id}`}
+                          src={currentLesson.content_url}
+                          controls
+                          controlsList="nodownload"
+                          className="w-full"
+                          onEnded={() => {
+                            if (currentLesson && !completedLessons.has(currentLesson.lesson_id)) {
+                              markLessonCompleted(currentLesson.lesson_id)
+                            }
+                          }}
+                        />
+                      </div>
+                    </div>
+                  )}
+
                   {/* Fallback / No content placeholder */}
-                  {(!currentLesson || (currentLesson.content_type !== "video" && currentLesson.content_type !== "quiz" && currentLesson.content_type !== "pdf" && currentLesson.content_type !== "text")) && (
+                  {(!currentLesson || (currentLesson.content_type !== "video" && currentLesson.content_type !== "quiz" && currentLesson.content_type !== "pdf" && currentLesson.content_type !== "text" && !((currentLesson.content_type === "image" || currentLesson.content_type === "audio") && currentLesson.content_url))) && (
                     <div className="flex-1 flex flex-col items-center justify-center bg-muted/30 p-12 text-center min-h-[400px]">
                       <div className="mb-6">
                         <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-primary/10 border border-primary/20 mx-auto">

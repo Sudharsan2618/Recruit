@@ -11,8 +11,13 @@ const inter = Inter({
 })
 
 export const metadata: Metadata = {
-  title: 'SkillBridge - Learn Skills, Land Careers',
+  title: 'CompanionLMS - Learn Skills, Land Careers',
   description: 'A comprehensive LMS and recruitment platform connecting students with top employers through world-class education.',
+  icons: {
+    icon: '/favicon.png',
+    shortcut: '/favicon.png',
+    apple: '/favicon.png',
+  },
 }
 
 export default function RootLayout({

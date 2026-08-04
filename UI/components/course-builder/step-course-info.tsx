@@ -123,18 +123,20 @@ export function StepCourseInfo({ courseId, initialData, onComplete }: StepCourse
   }
 
   return (
-    <div className="space-y-6 max-w-3xl">
+    <div className="space-y-6">
       {/* Basic Info */}
       <Card>
         <CardHeader><CardTitle className="text-lg">Basic Information</CardTitle></CardHeader>
         <CardContent className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="title">Course Title *</Label>
-            <Input id="title" placeholder="e.g. Advanced SQL Masterclass" value={title} onChange={e => setTitle(e.target.value)} />
-          </div>
-          <div className="space-y-2">
-            <Label htmlFor="short_desc">Short Description</Label>
-            <Textarea id="short_desc" placeholder="Brief summary (max 500 chars)" maxLength={500} rows={2} value={shortDescription} onChange={e => setShortDescription(e.target.value)} />
+          <div className="grid gap-4 lg:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="title">Course Title *</Label>
+              <Input id="title" placeholder="e.g. Advanced SQL Masterclass" value={title} onChange={e => setTitle(e.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="short_desc">Short Description</Label>
+              <Textarea id="short_desc" placeholder="Brief summary (max 500 chars)" maxLength={500} rows={2} value={shortDescription} onChange={e => setShortDescription(e.target.value)} />
+            </div>
           </div>
           <div className="space-y-2">
             <Label htmlFor="desc">Full Description</Label>
@@ -143,6 +145,8 @@ export function StepCourseInfo({ courseId, initialData, onComplete }: StepCourse
         </CardContent>
       </Card>
 
+      {/* Detail cards — two-column layout to use the full screen width */}
+      <div className="grid gap-6 lg:grid-cols-2 items-start">
       {/* Classification */}
       <Card>
         <CardHeader><CardTitle className="text-lg">Classification</CardTitle></CardHeader>
@@ -271,6 +275,7 @@ export function StepCourseInfo({ courseId, initialData, onComplete }: StepCourse
           </div>
         </CardContent>
       </Card>
+      </div>
 
       {/* Actions */}
       {error && <p className="text-sm text-destructive">{error}</p>}

@@ -54,14 +54,17 @@ app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # CORS — allow frontend
+# Parsed allow-list from FRONTEND_URL (handles comma-separated values, trailing
+# slashes, and www/non-www). Localhost is added only in DEBUG for local dev.
+_cors_origins = list(settings.CORS_ORIGINS)
+if settings.DEBUG:
+    for _dev in ("http://localhost:3000", "http://127.0.0.1:3000"):
+        if _dev not in _cors_origins:
+            _cors_origins.append(_dev)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        settings.FRONTEND_URL,
-        "http://localhost:3000",
-        "http://127.0.0.1:3000",
-        "https://recruit-smoky.vercel.app",
-    ] if settings.DEBUG else [settings.FRONTEND_URL],
+    allow_origins=_cors_origins,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allow_headers=["Authorization", "Content-Type", "Accept"],

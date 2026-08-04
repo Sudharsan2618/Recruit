@@ -57,7 +57,34 @@ class Settings(BaseSettings):
     MONGODB_DB: str = os.getenv("MONGODB_DB")
 
     # ── Frontend (CORS) ──
+    # May be a single URL or a comma-separated list of URLs. Use CORS_ORIGINS
+    # (parsed) for the actual allow-list — never the raw string.
     FRONTEND_URL: str = os.getenv("FRONTEND_URL")
+
+    @property
+    def CORS_ORIGINS(self) -> list:
+        """Parse FRONTEND_URL into a clean list of allowed CORS origins.
+
+        Browser ``Origin`` headers are always scheme + host [+ port] with no
+        trailing slash, so we split on commas and strip whitespace/trailing
+        slashes. For each host we also add its www/non-www counterpart so both
+        ``https://companionlms.com`` and ``https://www.companionlms.com`` work.
+        """
+        raw = self.FRONTEND_URL or ""
+        origins = set()
+        for part in raw.split(","):
+            origin = part.strip().rstrip("/")
+            if not origin:
+                continue
+            origins.add(origin)
+            scheme, sep, host = origin.partition("://")
+            if not sep or not host:
+                continue
+            if host.startswith("www."):
+                origins.add(f"{scheme}://{host[4:]}")
+            else:
+                origins.add(f"{scheme}://www.{host}")
+        return sorted(origins)
 
     # ── Razorpay (Payment Gateway) ──
     RAZORPAY_KEY_ID: str = os.getenv("RAZORPAY_KEY_ID", "")

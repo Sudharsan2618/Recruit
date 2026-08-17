@@ -69,6 +69,12 @@ const config: Config = {
           DEFAULT: 'hsl(var(--warning))',
           foreground: 'hsl(var(--warning-foreground))',
         },
+        coral: {
+          DEFAULT: 'hsl(var(--coral))',
+          foreground: 'hsl(var(--coral-foreground))',
+          dark: 'hsl(var(--coral-dark))',
+        },
+        ink: 'hsl(var(--ink))',
       },
       borderRadius: {
         lg: 'var(--radius)',

@@ -77,10 +77,12 @@ export function PortalShell({ children, portalName, navItems, portalColor, showN
           )}
         >
           {collapsed ? (
-            <Logo size={32} />
+            <span className="rounded-sm bg-white">
+              <Logo size={32} />
+            </span>
           ) : (
-            <div className="min-w-0">
-              <LogoFull height={26} priority />
+            <div className="relative min-w-0 before:pointer-events-none before:absolute before:left-0 before:top-0 before:z-0 before:h-[26px] before:w-[31px] before:rounded-sm before:bg-white">
+              <LogoFull height={26} priority className="relative z-[1]" />
               <p className="mt-1 truncate text-xs text-sidebar-foreground/60">{portalName}</p>
             </div>
           )}
@@ -131,7 +133,9 @@ export function PortalShell({ children, portalName, navItems, portalColor, showN
           <div className="absolute inset-0 bg-foreground/50" onClick={() => setMobileOpen(false)} role="presentation" />
           <aside className="absolute left-0 top-0 flex h-full w-64 flex-col bg-sidebar shadow-xl">
             <div className="flex h-16 items-center justify-between border-b border-sidebar-border px-6">
-              <LogoFull height={26} />
+              <div className="relative before:pointer-events-none before:absolute before:left-0 before:top-0 before:z-0 before:h-[26px] before:w-[31px] before:rounded-sm before:bg-white">
+                <LogoFull height={26} className="relative z-[1]" />
+              </div>
               <Button variant="ghost" size="icon" onClick={() => setMobileOpen(false)} className="text-sidebar-foreground">
                 <X className="h-5 w-5" />
                 <span className="sr-only">Close menu</span>

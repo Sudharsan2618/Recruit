@@ -63,14 +63,23 @@ def setup_bucket():
         )
         print(f"[OK]  Bucket '{settings.GCS_BUCKET_NAME}' created in asia-south1")
 
-    # Set CORS for frontend access
+    # Set CORS for frontend access.
+    # GCS matches the browser Origin header EXACTLY (scheme + host + port), so
+    # https://companionlms.com does NOT cover https://www.companionlms.com.
+    # settings.CORS_ORIGINS already expands every FRONTEND_URL host to both its
+    # www and non-www form; we union in the local dev origins so uploads work
+    # from a developer machine too.
+    cors_origins = sorted(
+        set(settings.CORS_ORIGINS)
+        | {
+            "http://localhost:3000",
+            "http://localhost:3001",
+            "http://127.0.0.1:3000",
+        }
+    )
     bucket.cors = [
         {
-            "origin": [
-                settings.FRONTEND_URL.rstrip("/"),
-                "http://localhost:3000",
-                "http://localhost:3001",
-            ],
+            "origin": cors_origins,
             # PUT/OPTIONS are required for direct-to-GCS browser uploads via
             # signed URLs; GET/HEAD serve the assets afterwards.
             "method": ["GET", "HEAD", "PUT", "OPTIONS"],
@@ -84,7 +93,7 @@ def setup_bucket():
         }
     ]
     bucket.patch()
-    print("[OK]  CORS configured for frontend access")
+    print(f"[OK]  CORS configured for: {', '.join(cors_origins)}")
 
     # Grant public read access to all objects (for course assets and resumes)
     try:

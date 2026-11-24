@@ -87,13 +87,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setLoading(false)
   }, [])
 
-  const _saveSession = useCallback(async (accessToken: string, userData: AuthUser) => {
+  const _saveSession = useCallback(async (accessToken: string, userData: AuthUser, refreshToken?: string) => {
     setToken(accessToken)
     setUser(userData)
-    // Deprecating auth_token in localStorage, but keep it for immediate client-side compat before cookie is fully propagated if needed, or better, remove it completely. 
-    // Wait, the client.ts now uses credentials: "include" so it works immediately too.
     localStorage.setItem("auth_token", accessToken)
     localStorage.setItem("auth_user", JSON.stringify(userData))
+    // Persist the refresh token so the API client can silently renew an expired
+    // access token instead of failing requests after a period of inactivity.
+    if (refreshToken) {
+      localStorage.setItem("refresh_token", refreshToken)
+    }
   }, [])
 
   const login = useCallback(async (email: string, password: string) => {
@@ -111,7 +114,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       const data = await res.json()
-      await _saveSession(data.access_token, data.user)
+      await _saveSession(data.access_token, data.user, data.refresh_token)
       return { success: true, user: data.user as AuthUser }
     } catch (err) {
       return { success: false, error: "Network error. Please try again." }
@@ -133,7 +136,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       const data = await res.json()
-      await _saveSession(data.access_token, data.user)
+      await _saveSession(data.access_token, data.user, data.refresh_token)
       return { success: true }
     } catch (err) {
       return { success: false, error: "Network error. Please try again." }
@@ -155,7 +158,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       const data = await res.json()
-      await _saveSession(data.access_token, data.user)
+      await _saveSession(data.access_token, data.user, data.refresh_token)
       return { success: true }
     } catch (err) {
       return { success: false, error: "Network error. Please try again." }
@@ -204,6 +207,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     setUser(null)
     localStorage.removeItem("auth_token")
     localStorage.removeItem("auth_user")
+    localStorage.removeItem("refresh_token")
     // Clear httpOnly cookie via backend
     fetch(`${API_BASE}/auth/logout`, { method: "POST", credentials: "include" }).catch(console.error)
     

@@ -7,20 +7,10 @@ export async function getStudentProfile(): Promise<StudentProfile> {
 }
 
 export async function updateStudentProfile(data: Partial<StudentProfile>): Promise<StudentProfile> {
-  const token = typeof window !== "undefined" ? localStorage.getItem("auth_token") : null;
-  const res = await fetch(`${API_BASE_URL}/auth/profile/student`, {
+  return fetchApiWithAuth<StudentProfile>("/auth/profile/student", {
     method: "PUT",
-    headers: {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
     body: JSON.stringify(data),
   });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ detail: "Failed to update profile" }));
-    throw new Error(err.detail || "Failed to update profile");
-  }
-  return res.json();
 }
 
 export async function getCompanyProfile(): Promise<CompanyProfile> {
@@ -28,20 +18,10 @@ export async function getCompanyProfile(): Promise<CompanyProfile> {
 }
 
 export async function updateCompanyProfile(data: Partial<CompanyProfile>): Promise<CompanyProfile> {
-  const token = typeof window !== "undefined" ? localStorage.getItem("auth_token") : null;
-  const res = await fetch(`${API_BASE_URL}/auth/profile/company`, {
+  return fetchApiWithAuth<CompanyProfile>("/auth/profile/company", {
     method: "PUT",
-    headers: {
-      "Content-Type": "application/json",
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-    },
     body: JSON.stringify(data),
   });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ detail: "Failed to update profile" }));
-    throw new Error(err.detail || "Failed to update profile");
-  }
-  return res.json();
 }
 
 export async function getStudentDashboard(): Promise<StudentDashboardData> {

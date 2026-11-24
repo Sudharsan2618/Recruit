@@ -28,7 +28,7 @@ export default function CompanyLoginPage() {
     const result = await login(email, password)
 
     if (result.success) {
-      router.push("/company")
+      router.push(result.user?.must_reset_password ? "/reset-password-required" : "/company")
     } else {
       setError(result.error || "Login failed")
     }

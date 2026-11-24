@@ -48,6 +48,8 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
     if (loading || UNGUARDED_PATHS.includes(pathname)) return
     if (!isAuthenticated) {
       router.push("/student/login")
+    } else if (user && user.must_reset_password) {
+      router.push("/reset-password-required")
     } else if (user && !user.onboarding_completed) {
       router.push("/student/onboarding")
     }
@@ -57,7 +59,7 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
   if (UNGUARDED_PATHS.includes(pathname)) return <>{children}</>
 
   // Show loading while restoring session, or while redirecting
-  if (loading || !isAuthenticated || (user && !user.onboarding_completed)) {
+  if (loading || !isAuthenticated || (user && (user.must_reset_password || !user.onboarding_completed))) {
     return (
       <PortalShell portalName="Student Portal" navItems={studentNav} portalColor="bg-primary">
         <DashboardSkeleton />

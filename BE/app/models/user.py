@@ -10,7 +10,7 @@ from typing import Optional
 
 from sqlalchemy import (
     Boolean, DateTime, Enum, Integer, Numeric, String, Text, ForeignKey,
-    ARRAY,
+    ARRAY, text,
 )
 from sqlalchemy.orm import relationship, Mapped, mapped_column
 from app.db.postgres import Base
@@ -33,6 +33,10 @@ class User(Base):
         default="pending_verification",
     )
     email_verified: Mapped[bool] = mapped_column(Boolean, default=False)
+    # Forces a password change on next login (admin-provisioned temp passwords).
+    must_reset_password: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("false")
+    )
     phone: Mapped[Optional[str]] = mapped_column(String(20))
     phone_verified: Mapped[bool] = mapped_column(Boolean, default=False)
     onboarding_completed: Mapped[bool] = mapped_column(Boolean, default=False)

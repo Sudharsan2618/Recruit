@@ -44,6 +44,11 @@ function AuthGuard({ children }: { children: React.ReactNode }) {
     return null
   }
 
+  if (user && user.must_reset_password) {
+    router.push("/reset-password-required")
+    return null
+  }
+
   if (user && !user.onboarding_completed) {
     router.push("/company/onboarding")
     return null

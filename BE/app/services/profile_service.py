@@ -14,6 +14,7 @@ def _build_user_data(user: User) -> dict:
         "user_type": user.user_type,
         "status": user.status,
         "onboarding_completed": user.onboarding_completed,
+        "must_reset_password": user.must_reset_password,
         "student_id": None,
         "first_name": None,
         "last_name": None,

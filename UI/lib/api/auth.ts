@@ -68,6 +68,29 @@ export async function getAdminUsers(params: {
   return fetchApiWithAuth(`/admin/users?${query.toString()}`);
 }
 
+export interface CreateUserPayload {
+  email: string;
+  user_type: "student" | "company";
+  first_name?: string;
+  last_name?: string;
+  company_name?: string;
+}
+
+export interface CreateUserResult {
+  user_id: number;
+  email: string;
+  user_type: string;
+  name: string;
+  temp_password: string;
+}
+
+export async function createUser(data: CreateUserPayload): Promise<CreateUserResult> {
+  return fetchApiWithAuth<CreateUserResult>("/admin/users", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
 export async function updateUserStatus(userId: number, newStatus: string): Promise<{ success: boolean }> {
   return fetchApiWithAuth(`/admin/users/${userId}/status?new_status=${newStatus}`, { method: "PUT" });
 }

@@ -22,7 +22,7 @@ from app.schemas.auth import (
     StudentDashboardResponse,
     StudentProfileFullOut, StudentProfileUpdateRequest,
     CompanyProfileFullOut, CompanyProfileUpdateRequest,
-    ForgotPasswordRequest, ResetPasswordRequest,
+    ForgotPasswordRequest, ResetPasswordRequest, ChangePasswordRequest,
 )
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
@@ -247,6 +247,34 @@ async def reset_password(
 
     logger.info("[AUTH] Password reset for user_id=%s", user_id)
     return {"detail": "Password has been reset successfully. You can now log in."}
+
+
+@router.post("/change-password")
+async def change_password(
+    body: ChangePasswordRequest,
+    user_id: int = Depends(get_current_user_id),
+    db: AsyncSession = Depends(get_db),
+):
+    """Set a new password for the authenticated user and clear the forced-reset flag.
+
+    Used to complete a forced first-login password change for admin-provisioned
+    accounts (and as a general authenticated password change).
+    """
+    from sqlalchemy import select
+    from app.models.user import User
+    from app.services.auth_service import hash_password
+
+    result = await db.execute(select(User).where(User.user_id == user_id))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+
+    user.password_hash = hash_password(body.new_password)
+    user.must_reset_password = False
+    await db.commit()
+
+    logger.info("[AUTH] Password changed for user_id=%s", user_id)
+    return {"detail": "Password updated successfully.", "must_reset_password": False}
 
 
 @router.post("/refresh")

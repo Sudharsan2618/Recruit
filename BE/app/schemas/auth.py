@@ -24,6 +24,7 @@ class UserOut(BaseModel):
     user_type: str
     status: str
     onboarding_completed: bool = False
+    must_reset_password: bool = False
     student_id: Optional[int] = None
     first_name: Optional[str] = None
     last_name: Optional[str] = None
@@ -300,6 +301,11 @@ class ForgotPasswordRequest(BaseModel):
 
 class ResetPasswordRequest(BaseModel):
     token: str
+    new_password: str = Field(..., min_length=8, max_length=72)
+
+
+class ChangePasswordRequest(BaseModel):
+    """Authenticated password change — used to complete a forced first-login reset."""
     new_password: str = Field(..., min_length=8, max_length=72)
 
 

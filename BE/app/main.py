@@ -23,6 +23,14 @@ async def lifespan(app: FastAPI):
     print(f"[INFO]  Listening on port: {port}")
     print(f"[DOCS]  http://localhost:{port}/docs")
 
+    # PostgreSQL — apply idempotent startup migrations (new columns, etc.)
+    try:
+        from app.db.migrate import ensure_schema
+        await ensure_schema()
+    except Exception as e:
+        print(f"[ERROR] Schema migration failed: {e}")
+        print("        App will continue to start but some features may fail.")
+
     # MongoDB connect + indexes
     try:
         await connect_mongodb()

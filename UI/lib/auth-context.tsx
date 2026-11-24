@@ -11,6 +11,7 @@ export interface AuthUser {
   user_type: string
   status: string
   onboarding_completed: boolean
+  must_reset_password?: boolean
   student_id: number | null
   first_name: string | null
   last_name: string | null
@@ -38,9 +39,10 @@ interface AuthContextType {
   user: AuthUser | null
   token: string | null
   loading: boolean
-  login: (email: string, password: string) => Promise<{ success: boolean; error?: string }>
+  login: (email: string, password: string) => Promise<{ success: boolean; error?: string; user?: AuthUser }>
   registerStudent: (data: RegisterStudentData) => Promise<{ success: boolean; error?: string }>
   registerCompany: (data: RegisterCompanyData) => Promise<{ success: boolean; error?: string }>
+  changePassword: (newPassword: string) => Promise<{ success: boolean; error?: string }>
   updateUser: (user: AuthUser) => void
   logout: () => void
   isAuthenticated: boolean
@@ -53,6 +55,7 @@ const AuthContext = createContext<AuthContextType>({
   login: async () => ({ success: false }),
   registerStudent: async () => ({ success: false }),
   registerCompany: async () => ({ success: false }),
+  changePassword: async () => ({ success: false }),
   updateUser: () => {},
   logout: () => {},
   isAuthenticated: false,
@@ -109,7 +112,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
       const data = await res.json()
       await _saveSession(data.access_token, data.user)
-      return { success: true }
+      return { success: true, user: data.user as AuthUser }
     } catch (err) {
       return { success: false, error: "Network error. Please try again." }
     }
@@ -159,6 +162,37 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [_saveSession])
 
+  const changePassword = useCallback(async (newPassword: string) => {
+    try {
+      const savedToken = typeof window !== "undefined" ? localStorage.getItem("auth_token") : null
+      const res = await fetch(`${API_BASE}/auth/change-password`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(savedToken ? { Authorization: `Bearer ${savedToken}` } : {}),
+        },
+        credentials: "include",
+        body: JSON.stringify({ new_password: newPassword }),
+      })
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ detail: "Could not update password" }))
+        return { success: false, error: err.detail || "Could not update password" }
+      }
+
+      // Clear the forced-reset flag locally so guards stop redirecting.
+      setUser((prev) => {
+        if (!prev) return prev
+        const next = { ...prev, must_reset_password: false }
+        localStorage.setItem("auth_user", JSON.stringify(next))
+        return next
+      })
+      return { success: true }
+    } catch (err) {
+      return { success: false, error: "Network error. Please try again." }
+    }
+  }, [])
+
   const updateUser = useCallback((updatedUser: AuthUser) => {
     setUser(updatedUser)
     localStorage.setItem("auth_user", JSON.stringify(updatedUser))
@@ -191,6 +225,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         login,
         registerStudent,
         registerCompany,
+        changePassword,
         updateUser,
         logout,
         isAuthenticated: !!token && !!user,

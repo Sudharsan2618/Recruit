@@ -7,11 +7,12 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
-import { Search, Users, Building2, ShieldCheck, MoreHorizontal, Ban, Trash2, CheckCircle2, Loader2 } from "lucide-react"
+import { Search, Users, Building2, ShieldCheck, MoreHorizontal, Ban, Trash2, CheckCircle2, Loader2, UserPlus } from "lucide-react"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { getAdminUsers, updateUserStatus, deleteUser, type AdminUser } from "@/lib/api"
 import { DashboardSkeleton } from "@/components/skeletons"
 import { TablePagination } from "@/components/table-pagination"
+import { CreateUserDialog } from "@/components/admin/create-user-dialog"
 
 const roleColors: Record<string, string> = {
   student: "bg-primary/10 text-primary",
@@ -36,6 +37,7 @@ export default function UserManagement() {
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(10)
   const [summary, setSummary] = useState({ student_count: 0, company_count: 0, active_count: 0 })
+  const [createOpen, setCreateOpen] = useState(false)
 
   useEffect(() => {
     const t = setTimeout(() => setSearchDebounced(search), 400)
@@ -91,10 +93,17 @@ export default function UserManagement() {
 
   return (
     <div className="flex flex-col gap-6">
-      <div>
-        <h1 className="text-2xl font-bold text-foreground">User Management</h1>
-        <p className="text-muted-foreground">View and manage all student and company accounts.</p>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-foreground">User Management</h1>
+          <p className="text-muted-foreground">View and manage all student and company accounts.</p>
+        </div>
+        <Button className="gap-2 sm:shrink-0" onClick={() => setCreateOpen(true)}>
+          <UserPlus className="h-4 w-4" /> Create User
+        </Button>
       </div>
+
+      <CreateUserDialog open={createOpen} onOpenChange={setCreateOpen} onCreated={loadUsers} />
 
       {/* Summary cards */}
       <div className="grid gap-4 sm:grid-cols-3">

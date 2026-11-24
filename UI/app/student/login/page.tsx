@@ -28,7 +28,7 @@ export default function StudentLoginPage() {
     const result = await login(email, password)
 
     if (result.success) {
-      router.push("/student")
+      router.push(result.user?.must_reset_password ? "/reset-password-required" : "/student")
     } else {
       setError(result.error || "Login failed")
     }

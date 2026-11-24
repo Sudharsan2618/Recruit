@@ -11,6 +11,8 @@ from sqlalchemy import text
 from app.db.postgres import get_db
 from app.services.matching_service import MatchingService
 from app.services.notification_service import create_notification
+from app.services.admin_user_service import AdminUserService
+from app.schemas.admin import AdminCreateUserRequest, AdminCreateUserResponse
 from app.api.dependencies import require_admin
 
 router = APIRouter(prefix="/admin", tags=["Admin"])
@@ -264,6 +266,33 @@ async def list_users(
             "active_count": summary["active_count"] if summary else 0,
         },
     }
+
+
+@router.post("/users", response_model=AdminCreateUserResponse, status_code=201)
+async def create_user(
+    body: AdminCreateUserRequest,
+    admin: dict = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Create a student or company account with a one-time temporary password.
+
+    The new account is active but flagged to force a password change on first
+    login. The plaintext temp password is returned once so the admin can share
+    it with the user; it is never stored or retrievable again.
+    """
+    service = AdminUserService(db)
+    try:
+        result = await service.create_user_with_temp_password(
+            email=body.email,
+            user_type=body.user_type,
+            first_name=body.first_name,
+            last_name=body.last_name,
+            company_name=body.company_name,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=409, detail=str(e))
+
+    return AdminCreateUserResponse(**result)
 
 
 @router.put("/users/{user_id}/status")

@@ -199,7 +199,7 @@ export function LessonEditorDialog({
           <DialogTitle>{isEdit ? "Edit Lesson" : "Add Lesson"}</DialogTitle>
         </DialogHeader>
 
-        <ScrollArea className="flex-1 px-6">
+        <ScrollArea className="flex-1 min-h-0 px-6">
           <div className="space-y-4 pb-4">
             {/* Common fields */}
             <div className="grid gap-3 sm:grid-cols-2">

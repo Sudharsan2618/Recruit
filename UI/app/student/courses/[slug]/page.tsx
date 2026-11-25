@@ -25,6 +25,7 @@ import {
   Shield,
   Award,
   AlertCircle,
+  Lock,
 } from "lucide-react"
 import Link from "next/link"
 import {
@@ -462,8 +463,16 @@ export default function CourseDetailPage() {
                 <div className="flex flex-col gap-3">
                   <div className="flex items-center gap-2 text-sm text-emerald-600">
                     <CheckCircle2 className="h-4 w-4" />
-                    <span className="font-medium">You are enrolled</span>
+                    <span className="font-medium">You have access</span>
                   </div>
+                  {(enrollment.access_starts_at || enrollment.expires_at) && (
+                    <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                      <Clock className="h-3.5 w-3.5" />
+                      {enrollment.access_starts_at ? `From ${enrollment.access_starts_at.slice(0, 10)}` : "From now"}
+                      {" · "}
+                      {enrollment.expires_at ? `until ${enrollment.expires_at.slice(0, 10)}` : "no end date"}
+                    </p>
+                  )}
                   <Button size="lg" className="w-full" asChild>
                     <Link href={`/student/player?slug=${course.slug}`}>
                       <Play className="mr-2 h-4 w-4" />
@@ -472,38 +481,11 @@ export default function CourseDetailPage() {
                   </Button>
                 </div>
               ) : (
-                <div className="flex flex-col gap-3">
-                  <Button
-                    size="lg"
-                    className="w-full"
-                    onClick={handleEnroll}
-                    disabled={enrolling || paymentProcessing}
-                  >
-                    {enrolling || paymentProcessing ? (
-                      <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        {paymentProcessing ? "Processing Payment..." : "Enrolling..."}
-                      </>
-                    ) : isFree ? (
-                      "Enroll for Free"
-                    ) : (
-                      <>
-                        <CreditCard className="mr-2 h-4 w-4" />
-                        Enroll Now — ₹{price.toLocaleString()}
-                      </>
-                    )}
-                  </Button>
-                  {!isFree && (
-                    <p className="text-[10px] text-center text-muted-foreground">
-                      🧪 Test Mode — Use card <code className="bg-muted px-1 py-0.5 rounded text-[10px]">4111 1111 1111 1111</code>
-                    </p>
-                  )}
-                  {paymentError && (
-                    <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50/50 dark:bg-red-950/10 px-3 py-2">
-                      <AlertCircle className="h-4 w-4 text-red-500 shrink-0 mt-0.5" />
-                      <p className="text-xs text-red-600">{paymentError}</p>
-                    </div>
-                  )}
+                <div className="flex items-start gap-2 rounded-lg border border-border bg-muted/30 px-3 py-3">
+                  <Lock className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
+                  <p className="text-xs text-muted-foreground">
+                    Access to this course is managed by your administrator. Please contact them to be enrolled.
+                  </p>
                 </div>
               )}
 

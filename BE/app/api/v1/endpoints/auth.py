@@ -78,6 +78,19 @@ async def login(request: Request, response: Response, body: LoginRequest, servic
             detail="Invalid email or password",
         )
 
+    # Account-status gate (admin approval workflow).
+    status = user_data.get("status")
+    if status == "pending_verification":
+        raise HTTPException(
+            status_code=403,
+            detail="Your account is awaiting admin approval. You'll be able to sign in once it's approved.",
+        )
+    if status in ("inactive", "suspended"):
+        raise HTTPException(
+            status_code=403,
+            detail="Your account is not active. Please contact support.",
+        )
+
     # JWT tokens
     token_data = {
         "sub": str(user_data["user_id"]),
@@ -102,10 +115,11 @@ async def login(request: Request, response: Response, body: LoginRequest, servic
     )
 
 
-@router.post("/register/student", response_model=TokenResponse)
+@router.post("/register/student")
 @limiter.limit("3/minute")
 async def register_student(request: Request, response: Response, body: StudentRegisterRequest, service: RegistrationService = Depends(get_reg_service)):
-    """Register a new student and return JWT token."""
+    """Register a new student. The account is created pending admin approval — no
+    session is issued until an admin approves it."""
     try:
         user_data = await service.register_student(
             email=body.email,
@@ -116,28 +130,23 @@ async def register_student(request: Request, response: Response, body: StudentRe
     except ValueError as e:
         raise HTTPException(status_code=409, detail=str(e))
 
-    token_data = {
-        "sub": str(user_data["user_id"]),
-        "email": user_data["email"],
-        "user_type": user_data["user_type"],
-    }
-    token = create_access_token(data=token_data)
-    refresh = create_refresh_token(data=token_data, user_type=user_data["user_type"])
-
     try:
         from app.services.event_logger import log_event
         await log_event("user.registered", user_id=user_data["user_id"])
     except Exception:
         pass
 
-    _set_auth_cookie(response, token)
-    return TokenResponse(access_token=token, refresh_token=refresh, user=UserOut(**user_data))
+    return {
+        "status": "pending_verification",
+        "detail": "Your account has been created and is awaiting admin approval. You'll be able to sign in once it's approved.",
+    }
 
 
-@router.post("/register/company", response_model=TokenResponse)
+@router.post("/register/company")
 @limiter.limit("3/minute")
 async def register_company(request: Request, response: Response, body: CompanyRegisterRequest, service: RegistrationService = Depends(get_reg_service)):
-    """Register a new company and return JWT token."""
+    """Register a new company. The account is created pending admin approval — no
+    session is issued until an admin approves it."""
     try:
         user_data = await service.register_company(
             email=body.email,
@@ -147,22 +156,16 @@ async def register_company(request: Request, response: Response, body: CompanyRe
     except ValueError as e:
         raise HTTPException(status_code=409, detail=str(e))
 
-    token_data = {
-        "sub": str(user_data["user_id"]),
-        "email": user_data["email"],
-        "user_type": user_data["user_type"],
-    }
-    token = create_access_token(data=token_data)
-    refresh = create_refresh_token(data=token_data, user_type=user_data["user_type"])
-
     try:
         from app.services.event_logger import log_event
         await log_event("user.registered", user_id=user_data["user_id"])
     except Exception:
         pass
 
-    _set_auth_cookie(response, token)
-    return TokenResponse(access_token=token, refresh_token=refresh, user=UserOut(**user_data))
+    return {
+        "status": "pending_verification",
+        "detail": "Your account has been created and is awaiting admin approval. You'll be able to sign in once it's approved.",
+    }
 
 
 @router.post("/logout")

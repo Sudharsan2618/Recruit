@@ -23,6 +23,11 @@ const statusColors: Record<string, string> = {
   active: "bg-success/10 text-success",
   inactive: "bg-muted text-muted-foreground",
   suspended: "bg-destructive/10 text-destructive",
+  pending_verification: "bg-amber-500/10 text-amber-600",
+}
+
+const statusLabels: Record<string, string> = {
+  pending_verification: "Pending",
 }
 
 export default function UserManagement() {
@@ -160,6 +165,7 @@ export default function UserManagement() {
           <SelectTrigger className="w-full sm:w-40"><SelectValue /></SelectTrigger>
           <SelectContent>
             <SelectItem value="all">All Status</SelectItem>
+            <SelectItem value="pending_verification">Pending Approval</SelectItem>
             <SelectItem value="active">Active</SelectItem>
             <SelectItem value="inactive">Inactive</SelectItem>
             <SelectItem value="suspended">Suspended</SelectItem>
@@ -211,7 +217,7 @@ export default function UserManagement() {
                     </TableCell>
                     <TableCell>
                       <Badge className={statusColors[user.status] || ""}>
-                        {user.status.charAt(0).toUpperCase() + user.status.slice(1)}
+                        {statusLabels[user.status] || (user.status.charAt(0).toUpperCase() + user.status.slice(1))}
                       </Badge>
                     </TableCell>
                     <TableCell className="hidden text-sm text-muted-foreground md:table-cell">
@@ -235,7 +241,16 @@ export default function UserManagement() {
                             </Button>
                           </DropdownMenuTrigger>
                           <DropdownMenuContent align="end">
-                            {user.status === "active" ? (
+                            {user.status === "pending_verification" ? (
+                              <>
+                                <DropdownMenuItem className="gap-2" onClick={() => handleStatusChange(user.user_id, "active")}>
+                                  <CheckCircle2 className="h-3.5 w-3.5" /> Approve
+                                </DropdownMenuItem>
+                                <DropdownMenuItem className="gap-2 text-destructive" onClick={() => handleStatusChange(user.user_id, "inactive")}>
+                                  <Ban className="h-3.5 w-3.5" /> Reject
+                                </DropdownMenuItem>
+                              </>
+                            ) : user.status === "active" ? (
                               <DropdownMenuItem className="gap-2" onClick={() => handleStatusChange(user.user_id, "suspended")}>
                                 <Ban className="h-3.5 w-3.5" /> Suspend
                               </DropdownMenuItem>

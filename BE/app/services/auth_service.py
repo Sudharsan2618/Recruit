@@ -109,11 +109,11 @@ class AuthService:
         if not verify_password(password, user.password_hash):
             return None
 
-        if user.status != "active":
-            return None
-
-        # Update last login
-        user.last_login_at = utc_now()
-        await self.db.flush()
+        # Return the user regardless of status (password is correct); the login
+        # endpoint decides what to do based on status (pending/inactive/active),
+        # so it can show an accurate message. Only stamp last_login when active.
+        if user.status == "active":
+            user.last_login_at = utc_now()
+            await self.db.flush()
 
         return _build_user_data(user)

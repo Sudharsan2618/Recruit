@@ -40,8 +40,8 @@ interface AuthContextType {
   token: string | null
   loading: boolean
   login: (email: string, password: string) => Promise<{ success: boolean; error?: string; user?: AuthUser }>
-  registerStudent: (data: RegisterStudentData) => Promise<{ success: boolean; error?: string }>
-  registerCompany: (data: RegisterCompanyData) => Promise<{ success: boolean; error?: string }>
+  registerStudent: (data: RegisterStudentData) => Promise<{ success: boolean; error?: string; pending?: boolean }>
+  registerCompany: (data: RegisterCompanyData) => Promise<{ success: boolean; error?: string; pending?: boolean }>
   changePassword: (newPassword: string) => Promise<{ success: boolean; error?: string }>
   updateUser: (user: AuthUser) => void
   logout: () => void
@@ -136,6 +136,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       const data = await res.json()
+      // New self-signups are created pending admin approval — no session issued.
+      if (!data.access_token) {
+        return { success: true, pending: true }
+      }
       await _saveSession(data.access_token, data.user, data.refresh_token)
       return { success: true }
     } catch (err) {
@@ -158,6 +162,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       const data = await res.json()
+      if (!data.access_token) {
+        return { success: true, pending: true }
+      }
       await _saveSession(data.access_token, data.user, data.refresh_token)
       return { success: true }
     } catch (err) {

@@ -3,7 +3,7 @@
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
-import { Building2, ArrowRight, Eye, EyeOff, Loader2 } from "lucide-react"
+import { Building2, ArrowRight, Eye, EyeOff, Loader2, CheckCircle2 } from "lucide-react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -18,6 +18,7 @@ export default function CompanyRegisterPage() {
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
+  const [submitted, setSubmitted] = useState(false)
   const { registerCompany } = useAuth()
   const router = useRouter()
 
@@ -38,7 +39,11 @@ export default function CompanyRegisterPage() {
     const result = await registerCompany({ email, password, company_name: companyName })
 
     if (result.success) {
-      router.push("/company/onboarding")
+      if (result.pending) {
+        setSubmitted(true)
+      } else {
+        router.push("/company/onboarding")
+      }
     } else {
       setError(result.error || "Registration failed")
     }
@@ -86,6 +91,22 @@ export default function CompanyRegisterPage() {
             <CardDescription>Set up your company profile and start hiring.</CardDescription>
           </CardHeader>
           <CardContent>
+            {submitted ? (
+              <div className="flex flex-col items-center gap-4 py-6 text-center">
+                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-accent/10">
+                  <CheckCircle2 className="h-6 w-6 text-accent" />
+                </div>
+                <div className="space-y-1">
+                  <p className="text-base font-semibold text-foreground">Account created — pending approval</p>
+                  <p className="text-sm text-muted-foreground">
+                    Your account is awaiting admin approval. You&apos;ll be able to sign in once it&apos;s approved.
+                  </p>
+                </div>
+                <Button asChild variant="outline" className="w-full">
+                  <Link href="/company/login">Back to Sign In</Link>
+                </Button>
+              </div>
+            ) : (
             <form onSubmit={handleRegister} className="flex flex-col gap-4">
               {error && (
                 <div className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive border border-destructive/20">
@@ -162,6 +183,7 @@ export default function CompanyRegisterPage() {
                 </Link>
               </p>
             </form>
+            )}
           </CardContent>
         </Card>
       </div>

@@ -20,7 +20,8 @@ class RegistrationService:
             email=email,
             password_hash=hash_password(password),
             user_type="student",
-            status="active",
+            # Self-signups require admin approval before they can log in.
+            status="pending_verification",
             email_verified=False,
             onboarding_completed=False,
         )
@@ -66,7 +67,8 @@ class RegistrationService:
             email=email,
             password_hash=hash_password(password),
             user_type="company",
-            status="active",
+            # Self-signups require admin approval before they can log in.
+            status="pending_verification",
             email_verified=False,
             onboarding_completed=False,
         )

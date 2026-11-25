@@ -3,7 +3,7 @@
 import { useState } from "react"
 import { useRouter } from "next/navigation"
 import Link from "next/link"
-import { ArrowRight, Eye, EyeOff, Loader2 } from "lucide-react"
+import { ArrowRight, Eye, EyeOff, Loader2, CheckCircle2 } from "lucide-react"
 import { Logo } from "@/components/logo"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -20,6 +20,7 @@ export default function StudentRegisterPage() {
   const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
+  const [submitted, setSubmitted] = useState(false)
   const { registerStudent } = useAuth()
   const router = useRouter()
 
@@ -40,7 +41,11 @@ export default function StudentRegisterPage() {
     const result = await registerStudent({ email, password, first_name: firstName, last_name: lastName })
 
     if (result.success) {
-      router.push("/student/onboarding")
+      if (result.pending) {
+        setSubmitted(true)
+      } else {
+        router.push("/student/onboarding")
+      }
     } else {
       setError(result.error || "Registration failed")
     }
@@ -86,6 +91,22 @@ export default function StudentRegisterPage() {
             <CardDescription>Create your student account to get started.</CardDescription>
           </CardHeader>
           <CardContent>
+            {submitted ? (
+              <div className="flex flex-col items-center gap-4 py-6 text-center">
+                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
+                  <CheckCircle2 className="h-6 w-6 text-primary" />
+                </div>
+                <div className="space-y-1">
+                  <p className="text-base font-semibold text-foreground">Account created — pending approval</p>
+                  <p className="text-sm text-muted-foreground">
+                    Your account is awaiting admin approval. You&apos;ll be able to sign in once it&apos;s approved.
+                  </p>
+                </div>
+                <Button asChild variant="outline" className="w-full">
+                  <Link href="/student/login">Back to Sign In</Link>
+                </Button>
+              </div>
+            ) : (
             <form onSubmit={handleRegister} className="flex flex-col gap-4">
               {error && (
                 <div className="rounded-md bg-destructive/10 px-3 py-2 text-sm text-destructive border border-destructive/20">
@@ -174,6 +195,7 @@ export default function StudentRegisterPage() {
                 </Link>
               </p>
             </form>
+            )}
           </CardContent>
         </Card>
       </div>

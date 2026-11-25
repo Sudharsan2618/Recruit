@@ -33,6 +33,7 @@ class ContentType(str, enum.Enum):
     image = "image"
     quiz = "quiz"
     flashcard = "flashcard"
+    assignment = "assignment"
     scorm_package = "scorm_package"
     external_link = "external_link"
 

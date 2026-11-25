@@ -12,6 +12,7 @@ import { Search, BookOpen, Users, Layers, Eye, EyeOff, Trash2, Loader2, Plus, Pe
 import { getAdminCourses, toggleCoursePublish, deleteAdminCourse, type AdminCourse } from "@/lib/api"
 import { DashboardSkeleton } from "@/components/skeletons"
 import { TablePagination } from "@/components/table-pagination"
+import { CourseAccessDialog } from "@/components/admin/course-access-dialog"
 
 const levelColors: Record<string, string> = {
   beginner: "bg-success/10 text-success",
@@ -30,6 +31,7 @@ export default function CourseManagement() {
   const [page, setPage] = useState(1)
   const [pageSize, setPageSize] = useState(10)
   const [summary, setSummary] = useState({ published_count: 0, draft_count: 0, total_enrollments: 0 })
+  const [accessCourse, setAccessCourse] = useState<AdminCourse | null>(null)
 
   useEffect(() => {
     const t = setTimeout(() => setSearchDebounced(search), 400)
@@ -224,6 +226,15 @@ export default function CourseManagement() {
                             size="sm"
                             variant="ghost"
                             className="gap-1 text-xs"
+                            title="Manage who can access this course"
+                            onClick={() => setAccessCourse(course)}
+                          >
+                            <Users className="h-3.5 w-3.5" /> Access
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="gap-1 text-xs"
                             onClick={() => handleTogglePublish(course.course_id, !course.is_published)}
                           >
                             {course.is_published ? (
@@ -266,6 +277,16 @@ export default function CourseManagement() {
           )}
         </CardContent>
       </Card>
+
+      {accessCourse && (
+        <CourseAccessDialog
+          open
+          onOpenChange={(o) => { if (!o) setAccessCourse(null) }}
+          courseId={accessCourse.course_id}
+          courseTitle={accessCourse.title}
+          onChanged={loadCourses}
+        />
+      )}
     </div>
   )
 }

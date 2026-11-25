@@ -38,6 +38,7 @@ import {
   Video,
   X,
   Brain,
+  Lock,
   Download,
   AlertCircle,
   Trophy,
@@ -397,6 +398,7 @@ export default function CoursePlayer() {
 
   // Certificate State
   const [enrollment, setEnrollment] = useState<EnrollmentOut | null>(null)
+  const [accessState, setAccessState] = useState<"loading" | "ok" | "no_access" | "not_started" | "expired">("loading")
   const [certLoading, setCertLoading] = useState(false)
   const [showCertBanner, setShowCertBanner] = useState(false)
 
@@ -453,25 +455,24 @@ export default function CoursePlayer() {
         console.warn("Failed to start tracking session:", trackingErr)
       }
 
-      // 2. Ensure enrollment exists (must happen BEFORE progress fetch)
+      // 2. Access check — must have an admin-granted enrollment, within its
+      // start/end window. No self-enrollment (admin allowlist model).
       try {
-        if (u.student_id) {
-          const enrolls = await getEnrollments(u.student_id)
-          let existing = enrolls.find((e) => e.course_id === c.course_id)
-          if (!existing) {
-            // Auto-enroll so progress tracking can work
-            try {
-              existing = await enrollInCourse(c.course_id, u.student_id)
-            } catch {
-              // 409 = already enrolled (race condition) — re-fetch to get the enrollment
-              const retryEnrolls = await getEnrollments(u.student_id)
-              existing = retryEnrolls.find((e) => e.course_id === c.course_id) || undefined
-            }
-          }
-          if (existing) setEnrollment(existing)
-        }
+        if (!u.student_id) { setAccessState("no_access"); return }
+        const enrolls = await getEnrollments(u.student_id)
+        const existing = enrolls.find((e) => e.course_id === c.course_id)
+        if (!existing) { setAccessState("no_access"); return }
+        setEnrollment(existing)
+        const now = Date.now()
+        const start = existing.access_starts_at ? Date.parse(existing.access_starts_at + "Z") : null
+        const end = existing.expires_at ? Date.parse(existing.expires_at + "Z") : null
+        if (start && now < start) { setAccessState("not_started"); return }
+        if (end && now > end) { setAccessState("expired"); return }
+        setAccessState("ok")
       } catch (eErr) {
-        console.warn("Failed to fetch/create enrollment", eErr)
+        console.warn("Failed to verify course access", eErr)
+        setAccessState("no_access")
+        return
       }
 
       // 3. Fetch PostgreSQL lesson progress (requires enrollment to exist)
@@ -1154,6 +1155,44 @@ export default function CoursePlayer() {
         <p className="text-lg font-medium text-destructive">Failed to load course</p>
         <p className="text-sm text-muted-foreground">{error}</p>
         <Button variant="outline" className="mt-4" onClick={() => router.push("/student/courses")}>
+          Back to Catalog
+        </Button>
+      </div>
+    )
+  }
+
+  if (accessState === "loading") {
+    return <PlayerSkeleton />
+  }
+
+  if (accessState !== "ok") {
+    const info =
+      accessState === "not_started"
+        ? {
+            title: "Access hasn't started yet",
+            msg: enrollment?.access_starts_at
+              ? `Your access to this course begins on ${enrollment.access_starts_at.slice(0, 10)}.`
+              : "Your access window hasn't opened yet.",
+          }
+        : accessState === "expired"
+        ? {
+            title: "Your access has expired",
+            msg: enrollment?.expires_at
+              ? `Access ended on ${enrollment.expires_at.slice(0, 10)}. Contact your administrator to extend it.`
+              : "Contact your administrator to extend your access.",
+          }
+        : {
+            title: "You don't have access to this course",
+            msg: "Your administrator hasn't granted you access. Please contact them to be enrolled.",
+          }
+    return (
+      <div className="flex h-screen flex-col items-center justify-center bg-background text-center px-4">
+        <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-muted">
+          <Lock className="h-7 w-7 text-muted-foreground" />
+        </div>
+        <p className="text-lg font-semibold text-foreground">{info.title}</p>
+        <p className="mt-1 max-w-md text-sm text-muted-foreground">{info.msg}</p>
+        <Button variant="outline" className="mt-5" onClick={() => router.push("/student/courses")}>
           Back to Catalog
         </Button>
       </div>

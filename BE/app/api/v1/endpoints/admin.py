@@ -12,7 +12,10 @@ from app.db.postgres import get_db
 from app.services.matching_service import MatchingService
 from app.services.notification_service import create_notification
 from app.services.admin_user_service import AdminUserService
-from app.schemas.admin import AdminCreateUserRequest, AdminCreateUserResponse
+from app.schemas.admin import (
+    AdminCreateUserRequest, AdminCreateUserResponse,
+    CourseAccessGrantRequest, CourseAccessUpdateRequest,
+)
 from app.api.dependencies import require_admin
 
 router = APIRouter(prefix="/admin", tags=["Admin"])
@@ -465,6 +468,124 @@ async def delete_course(
     from app.utils.cache import invalidate_course_caches
     invalidate_course_caches()
     return {"success": True, "course_id": course_id}
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# COURSE ACCESS (admin-controlled enrollment + date window)
+# ══════════════════════════════════════════════════════════════════════════
+
+@router.get("/courses/{course_id}/access")
+async def list_course_access(
+    course_id: int,
+    admin: dict = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """List the students granted access to a course, with their access window."""
+    rows = await db.execute(text("""
+        SELECT e.enrollment_id, e.student_id, u.user_id, u.email, u.status AS user_status,
+               s.first_name, s.last_name, e.status, e.progress_percentage,
+               e.access_starts_at, e.expires_at, e.enrolled_at
+        FROM enrollments e
+        JOIN students s ON s.student_id = e.student_id
+        JOIN users u ON u.user_id = s.user_id
+        WHERE e.course_id = :cid
+        ORDER BY e.enrolled_at DESC
+    """), {"cid": course_id})
+    out = []
+    for r in rows.mappings().all():
+        row = dict(r)
+        row["name"] = f"{r['first_name'] or ''} {r['last_name'] or ''}".strip() or r["email"]
+        row["progress_percentage"] = float(row["progress_percentage"] or 0)
+        out.append(row)
+    return {"access": out, "total": len(out)}
+
+
+@router.post("/courses/{course_id}/access", status_code=201)
+async def grant_course_access(
+    course_id: int,
+    body: CourseAccessGrantRequest,
+    admin: dict = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Grant a student access to a course with an optional start/end window.
+
+    Idempotent per (student, course): re-granting updates the window instead of
+    erroring, and re-activates an expired grant.
+    """
+    if body.expires_at and body.access_starts_at and body.expires_at <= body.access_starts_at:
+        raise HTTPException(status_code=400, detail="End date must be after the start date")
+
+    sid = await db.execute(text("SELECT student_id FROM students WHERE user_id = :uid"), {"uid": body.user_id})
+    student_id = sid.scalar()
+    if not student_id:
+        raise HTTPException(status_code=400, detail="Selected user is not a student")
+
+    cok = await db.execute(text("SELECT 1 FROM courses WHERE course_id = :cid"), {"cid": course_id})
+    if not cok.scalar():
+        raise HTTPException(status_code=404, detail="Course not found")
+
+    result = await db.execute(text("""
+        INSERT INTO enrollments (student_id, course_id, status, access_starts_at, expires_at, enrolled_at)
+        VALUES (:sid, :cid, 'in_progress', :starts, :expires, :now)
+        ON CONFLICT (student_id, course_id) DO UPDATE SET
+            access_starts_at = EXCLUDED.access_starts_at,
+            expires_at = EXCLUDED.expires_at,
+            status = CASE WHEN enrollments.status = 'expired' THEN 'in_progress' ELSE enrollments.status END
+        RETURNING enrollment_id
+    """), {"sid": student_id, "cid": course_id, "starts": body.access_starts_at,
+           "expires": body.expires_at, "now": utc_now()})
+    enrollment_id = result.scalar()
+    await db.commit()
+    return {"success": True, "enrollment_id": enrollment_id, "student_id": student_id}
+
+
+@router.put("/courses/{course_id}/access/{enrollment_id}")
+async def update_course_access(
+    course_id: int,
+    enrollment_id: int,
+    body: CourseAccessUpdateRequest,
+    admin: dict = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Update/extend an existing grant's access window."""
+    if body.expires_at and body.access_starts_at and body.expires_at <= body.access_starts_at:
+        raise HTTPException(status_code=400, detail="End date must be after the start date")
+
+    now = utc_now()
+    result = await db.execute(text("""
+        UPDATE enrollments SET
+            access_starts_at = :starts,
+            expires_at = :expires,
+            status = CASE
+                WHEN status = 'expired' AND (:expires IS NULL OR :expires > :now) THEN 'in_progress'
+                ELSE status
+            END
+        WHERE enrollment_id = :eid AND course_id = :cid
+        RETURNING enrollment_id
+    """), {"starts": body.access_starts_at, "expires": body.expires_at,
+           "eid": enrollment_id, "cid": course_id, "now": now})
+    if not result.scalar():
+        raise HTTPException(status_code=404, detail="Enrollment not found")
+    await db.commit()
+    return {"success": True}
+
+
+@router.delete("/courses/{course_id}/access/{enrollment_id}")
+async def revoke_course_access(
+    course_id: int,
+    enrollment_id: int,
+    admin: dict = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Revoke a student's access to a course (removes the enrollment)."""
+    result = await db.execute(
+        text("DELETE FROM enrollments WHERE enrollment_id = :eid AND course_id = :cid RETURNING enrollment_id"),
+        {"eid": enrollment_id, "cid": course_id},
+    )
+    if not result.scalar():
+        raise HTTPException(status_code=404, detail="Enrollment not found")
+    await db.commit()
+    return {"success": True}
 
 
 # ══════════════════════════════════════════════════════════════════════════

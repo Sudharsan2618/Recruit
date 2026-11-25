@@ -1,8 +1,22 @@
 """Pydantic schemas for admin-only operations."""
 
+from datetime import datetime
 from typing import Optional, Literal
 
 from pydantic import BaseModel, EmailStr, Field, model_validator
+
+
+class CourseAccessGrantRequest(BaseModel):
+    """Admin grants a user (student) access to a course with a start/end window."""
+    user_id: int
+    access_starts_at: Optional[datetime] = None  # null = available immediately
+    expires_at: Optional[datetime] = None         # null = no end date
+
+
+class CourseAccessUpdateRequest(BaseModel):
+    """Admin updates/extends an existing grant's window."""
+    access_starts_at: Optional[datetime] = None
+    expires_at: Optional[datetime] = None
 
 
 class AdminCreateUserRequest(BaseModel):

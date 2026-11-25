@@ -76,6 +76,8 @@ export default function CourseCatalog() {
   }, [search, user?.student_id])
 
   const filtered = courses.filter((c) => {
+    // Admin allowlist: students only see courses they've been granted access to.
+    if (!enrollmentMap.has(c.id)) return false
     if (search && !c.title.toLowerCase().includes(search.toLowerCase())) return false
     if (category !== "All" && c.category !== category) return false
     if (level !== "All" && c.level !== level) return false
@@ -89,8 +91,8 @@ export default function CourseCatalog() {
   return (
     <div className="flex flex-col gap-6">
       <div>
-        <h1 className="text-2xl font-bold text-foreground">Course Catalog</h1>
-        <p className="text-muted-foreground">Discover courses to build your skills and advance your career.</p>
+        <h1 className="text-2xl font-bold text-foreground">My Courses</h1>
+        <p className="text-muted-foreground">Courses your administrator has given you access to.</p>
       </div>
 
       {/* Filters */}
@@ -190,6 +192,16 @@ export default function CourseCatalog() {
                     </div>
                   )}
 
+                  {/* Access window */}
+                  {enrollment && (enrollment.access_starts_at || enrollment.expires_at) && (
+                    <p className="flex items-center gap-1 text-xs text-muted-foreground">
+                      <Clock className="h-3 w-3" />
+                      {enrollment.access_starts_at ? `From ${enrollment.access_starts_at.slice(0, 10)}` : "From now"}
+                      {" · "}
+                      {enrollment.expires_at ? `until ${enrollment.expires_at.slice(0, 10)}` : "no end date"}
+                    </p>
+                  )}
+
                   {/* Skills */}
                   {course.skills.length > 0 && (
                     <div className="flex flex-wrap gap-1">
@@ -240,8 +252,17 @@ export default function CourseCatalog() {
 
       {!loading && !error && filtered.length === 0 && (
         <div className="flex flex-col items-center justify-center py-16 text-center">
-          <p className="text-lg font-medium text-foreground">No courses found</p>
-          <p className="text-sm text-muted-foreground">Try adjusting your filters.</p>
+          {enrollments.length === 0 ? (
+            <>
+              <p className="text-lg font-medium text-foreground">No courses assigned yet</p>
+              <p className="text-sm text-muted-foreground">Your administrator hasn&apos;t given you access to any courses. Please contact them.</p>
+            </>
+          ) : (
+            <>
+              <p className="text-lg font-medium text-foreground">No courses match your filters</p>
+              <p className="text-sm text-muted-foreground">Try adjusting your filters.</p>
+            </>
+          )}
         </div>
       )}
     </div>

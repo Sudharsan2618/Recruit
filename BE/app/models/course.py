@@ -390,7 +390,8 @@ class Enrollment(Base):
     enrolled_at: Mapped[datetime] = mapped_column(DateTime, default=utc_now)
     started_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
     completed_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
-    expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime)
+    access_starts_at: Mapped[Optional[datetime]] = mapped_column(DateTime)  # admin-set access window start
+    expires_at: Mapped[Optional[datetime]] = mapped_column(DateTime)         # admin-set access window end
 
     certificate_issued: Mapped[bool] = mapped_column(Boolean, default=False)
     certificate_url: Mapped[Optional[str]] = mapped_column(String(500))

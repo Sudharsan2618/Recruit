@@ -267,6 +267,8 @@ export interface EnrollmentOut {
   enrolled_at: string;
   started_at: string | null;
   completed_at: string | null;
+  access_starts_at: string | null;
+  expires_at: string | null;
   certificate_issued: boolean;
   certificate_url: string | null;
   certificate_issued_at: string | null;

@@ -275,6 +275,45 @@ export async function saveAssignment(lessonId: number, data: Record<string, any>
   return fetchApiWithAuth(`/admin/courses/builder/lessons/${lessonId}/assignment`, { method: 'POST', body: JSON.stringify(data) })
 }
 
+// ── Course access (admin-controlled enrollment + date window) ──
+
+export interface CourseAccessRow {
+  enrollment_id: number
+  student_id: number
+  user_id: number
+  email: string
+  name: string
+  user_status: string
+  status: string
+  progress_percentage: number
+  access_starts_at: string | null
+  expires_at: string | null
+  enrolled_at: string
+}
+
+export async function getCourseAccess(courseId: number): Promise<{ access: CourseAccessRow[]; total: number }> {
+  return fetchApiWithAuth(`/admin/courses/${courseId}/access`)
+}
+
+export async function grantCourseAccess(
+  courseId: number,
+  data: { user_id: number; access_starts_at?: string | null; expires_at?: string | null },
+): Promise<{ success: boolean; enrollment_id: number }> {
+  return fetchApiWithAuth(`/admin/courses/${courseId}/access`, { method: 'POST', body: JSON.stringify(data) })
+}
+
+export async function updateCourseAccess(
+  courseId: number,
+  enrollmentId: number,
+  data: { access_starts_at?: string | null; expires_at?: string | null },
+): Promise<{ success: boolean }> {
+  return fetchApiWithAuth(`/admin/courses/${courseId}/access/${enrollmentId}`, { method: 'PUT', body: JSON.stringify(data) })
+}
+
+export async function revokeCourseAccess(courseId: number, enrollmentId: number): Promise<{ success: boolean }> {
+  return fetchApiWithAuth(`/admin/courses/${courseId}/access/${enrollmentId}`, { method: 'DELETE' })
+}
+
 // ── Publish ──
 
 export async function publishCourse(courseId: number): Promise<{ success: boolean; errors: string[] }> {

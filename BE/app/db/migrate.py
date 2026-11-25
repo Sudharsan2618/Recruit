@@ -59,6 +59,9 @@ _MIGRATIONS = [
     )
     """,
     "CREATE INDEX IF NOT EXISTS idx_assignment_questions_assignment ON assignment_questions(assignment_id)",
+
+    # 007 — admin-controlled course access window (start; end = existing expires_at).
+    "ALTER TABLE enrollments ADD COLUMN IF NOT EXISTS access_starts_at TIMESTAMP",
 ]
 
 

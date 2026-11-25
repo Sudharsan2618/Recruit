@@ -8,6 +8,7 @@ from sqlalchemy import text
 from app.db.postgres import get_db
 from app.services.course_service import CourseService
 from app.api.dependencies import get_current_user_id
+from app.utils.time import utc_now
 from app.schemas.course import (
     CourseListResponse, CourseDetail,
     LessonOut, EnrollRequest, EnrollmentOut,
@@ -21,6 +22,31 @@ router = APIRouter(prefix="/courses", tags=["Courses"])
 
 def get_service(db: AsyncSession = Depends(get_db)) -> CourseService:
     return CourseService(db)
+
+
+async def _assert_course_access(db: AsyncSession, student_id: int, course_id: int) -> None:
+    """Enforce admin-granted access + the start/end window. Raises 403 otherwise."""
+    row = await db.execute(text("""
+        SELECT access_starts_at, expires_at
+        FROM enrollments WHERE student_id = :sid AND course_id = :cid
+    """), {"sid": student_id, "cid": course_id})
+    e = row.mappings().first()
+    if not e:
+        raise HTTPException(
+            status_code=403,
+            detail="You don't have access to this course. Please contact your administrator.",
+        )
+    now = utc_now()  # naive UTC, matches the stored timestamps
+    if e["access_starts_at"] and now < e["access_starts_at"]:
+        raise HTTPException(
+            status_code=403,
+            detail=f"Your access to this course hasn't started yet (starts {e['access_starts_at'].strftime('%d %b %Y')}).",
+        )
+    if e["expires_at"] and now > e["expires_at"]:
+        raise HTTPException(
+            status_code=403,
+            detail="Your access to this course has expired. Please contact your administrator to extend it.",
+        )
 
 
 # ── Course Discovery ──
@@ -142,35 +168,17 @@ async def get_flashcard_deck(
 student_router = APIRouter(prefix="/students", tags=["Student Learning"])
 
 
-@student_router.post("/enroll/{course_id}", response_model=EnrollmentOut)
+@student_router.post("/enroll/{course_id}")
 async def enroll_in_course(
     course_id: int,
     body: EnrollRequest,
     service: CourseService = Depends(get_service),
 ):
-    """Enroll a student in a course."""
-    try:
-        enrollment = await service.enroll_student(body.student_id, course_id)
-    except ValueError as e:
-        raise HTTPException(status_code=409, detail=str(e))
-
-    # Regenerate student embedding in background (non-blocking)
-    import asyncio
-    async def _update_embedding(sid: int):
-        try:
-            from app.services.embedding_service import generate_student_embedding
-            import logging
-            emb = await generate_student_embedding(sid)
-            logging.getLogger(__name__).info(
-                f"Enrollment embedding for student {sid}: {emb.get('status') if emb else 'no_data'}"
-            )
-        except Exception as e:
-            import logging
-            logging.getLogger(__name__).warning(f"Enrollment embedding failed: {e}")
-
-    asyncio.create_task(_update_embedding(body.student_id))
-
-    return enrollment
+    """Self-enrollment is disabled: course access is admin-controlled (allowlist)."""
+    raise HTTPException(
+        status_code=403,
+        detail="Course access is managed by your administrator. Please contact them to be enrolled.",
+    )
 
 
 
@@ -200,8 +208,10 @@ async def update_progress(
     body: ProgressUpdate,
     student_id: int = Query(..., description="Student ID"),
     service: CourseService = Depends(get_service),
+    db: AsyncSession = Depends(get_db),
 ):
-    """Update lesson progress (video position, completion, time spent)."""
+    """Update lesson progress — gated by the admin-granted access window."""
+    await _assert_course_access(db, student_id, course_id)
     try:
         return await service.update_progress(student_id, course_id, body)
     except ValueError as e:

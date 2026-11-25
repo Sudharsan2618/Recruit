@@ -219,6 +219,8 @@ class EnrollmentOut(BaseModel):
     enrolled_at: datetime
     started_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
+    access_starts_at: Optional[datetime] = None
+    expires_at: Optional[datetime] = None
     certificate_issued: bool = False
     certificate_url: Optional[str] = None
     certificate_issued_at: Optional[datetime] = None

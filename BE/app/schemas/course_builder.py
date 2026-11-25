@@ -310,6 +310,56 @@ class FlashcardDeckOut(BaseModel):
 
 
 # ══════════════════════════════════════════════════════════════════════════
+# ASSIGNMENT (coding exercise)
+# ══════════════════════════════════════════════════════════════════════════
+
+class AssignmentQuestionInput(BaseModel):
+    title: Optional[str] = None
+    problem_statement: str
+    starter_code: Optional[str] = None
+    expected_output: Optional[str] = None
+    sample_input: Optional[str] = None
+    solution_code: Optional[str] = None
+    solution_explanation: Optional[str] = None
+    language: str = "python"
+    points: int = 10
+
+
+class AssignmentCreateRequest(BaseModel):
+    title: str
+    description: Optional[str] = None
+    instructions: Optional[str] = None
+    language: str = "python"
+    questions: List[AssignmentQuestionInput] = []
+
+
+class AssignmentQuestionOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    question_id: int
+    title: Optional[str] = None
+    problem_statement: str
+    starter_code: Optional[str] = None
+    expected_output: Optional[str] = None
+    sample_input: Optional[str] = None
+    solution_code: Optional[str] = None
+    solution_explanation: Optional[str] = None
+    language: str = "python"
+    points: int = 10
+    order_index: int = 0
+
+
+class AssignmentOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+    assignment_id: int
+    title: str
+    description: Optional[str] = None
+    instructions: Optional[str] = None
+    language: str = "python"
+    total_questions: int = 0
+    questions: List[AssignmentQuestionOut] = []
+
+
+# ══════════════════════════════════════════════════════════════════════════
 # BUILDER COMPOSITE RESPONSES
 # ══════════════════════════════════════════════════════════════════════════
 

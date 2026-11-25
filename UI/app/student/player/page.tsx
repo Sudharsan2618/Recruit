@@ -21,6 +21,7 @@ import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
+import { AssignmentPlayer } from "@/components/student/assignment-player"
 import {
   ArrowLeft,
   BookOpen,
@@ -1638,8 +1639,13 @@ export default function CoursePlayer() {
                     </div>
                   )}
 
+                  {/* Coding Assignment */}
+                  {currentLesson?.content_type === "assignment" && (
+                    <AssignmentPlayer lessonId={currentLesson.lesson_id} />
+                  )}
+
                   {/* Fallback / No content placeholder */}
-                  {(!currentLesson || (currentLesson.content_type !== "video" && currentLesson.content_type !== "quiz" && currentLesson.content_type !== "pdf" && currentLesson.content_type !== "text" && !((currentLesson.content_type === "image" || currentLesson.content_type === "audio") && currentLesson.content_url))) && (
+                  {(!currentLesson || (currentLesson.content_type !== "video" && currentLesson.content_type !== "quiz" && currentLesson.content_type !== "assignment" && currentLesson.content_type !== "pdf" && currentLesson.content_type !== "text" && !((currentLesson.content_type === "image" || currentLesson.content_type === "audio") && currentLesson.content_url))) && (
                     <div className="flex-1 flex flex-col items-center justify-center bg-muted/30 p-12 text-center min-h-[400px]">
                       <div className="mb-6">
                         <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-primary/10 border border-primary/20 mx-auto">
@@ -1679,7 +1685,7 @@ export default function CoursePlayer() {
           </div>
 
           {/* Lesson Info Area - Consistent with app design system */}
-          {currentLesson?.content_type !== "quiz" && (
+          {currentLesson?.content_type !== "quiz" && currentLesson?.content_type !== "assignment" && (
             <div className="bg-background border-t border-border">
               <div className="max-w-5xl mx-auto px-4 py-8 sm:px-6 sm:py-10 lg:px-8">
                 <div className="flex flex-col lg:flex-row gap-8">

@@ -3,6 +3,7 @@
 from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import text
 
 from app.db.postgres import get_db
 from app.services.course_service import CourseService
@@ -91,6 +92,28 @@ async def submit_quiz(
         return await service.submit_quiz(quiz_id, enrollment_id, submission)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+
+# ── Assignment (coding exercise) ──
+
+@router.get("/lessons/{lesson_id}/assignment")
+async def get_lesson_assignment(lesson_id: int, db: AsyncSession = Depends(get_db)):
+    """Get the coding assignment + questions for a lesson (student-facing)."""
+    aq = await db.execute(text("""
+        SELECT assignment_id, title, description, instructions, language, total_questions
+        FROM assignments WHERE lesson_id = :lid
+    """), {"lid": lesson_id})
+    assignment = aq.mappings().first()
+    if not assignment:
+        raise HTTPException(status_code=404, detail="Assignment not found")
+
+    qq = await db.execute(text("""
+        SELECT question_id, title, problem_statement, starter_code, expected_output,
+               sample_input, solution_code, solution_explanation, language, points, order_index
+        FROM assignment_questions WHERE assignment_id = :aid ORDER BY order_index
+    """), {"aid": assignment["assignment_id"]})
+    questions = [dict(q) for q in qq.mappings().all()]
+    return {**dict(assignment), "questions": questions}
 
 
 # ── Materials ──

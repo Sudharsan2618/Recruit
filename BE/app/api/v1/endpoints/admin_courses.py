@@ -18,6 +18,7 @@ from app.schemas.course_builder import (
     LessonCreateRequest, LessonUpdateRequest,
     QuizCreateRequest, QuizOut,
     FlashcardDeckCreateRequest, FlashcardDeckOut,
+    AssignmentCreateRequest, AssignmentOut,
     ModuleBuilderOut, LessonBuilderOut,
 )
 
@@ -571,6 +572,84 @@ async def save_flashcards(
 
 
 # ══════════════════════════════════════════════════════════════════════════
+# ASSIGNMENTS (coding exercises, per lesson)
+# ══════════════════════════════════════════════════════════════════════════
+
+@router.get("/lessons/{lesson_id}/assignment")
+async def get_assignment(
+    lesson_id: int,
+    admin: dict = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    aq = await db.execute(text("""
+        SELECT assignment_id, title, description, instructions, language, total_questions
+        FROM assignments WHERE lesson_id = :lid
+    """), {"lid": lesson_id})
+    assignment = aq.mappings().first()
+    if not assignment:
+        return None
+
+    questions_q = await db.execute(text("""
+        SELECT question_id, title, problem_statement, starter_code, expected_output,
+               sample_input, solution_code, solution_explanation, language, points, order_index
+        FROM assignment_questions WHERE assignment_id = :aid ORDER BY order_index
+    """), {"aid": assignment["assignment_id"]})
+    questions = [dict(q) for q in questions_q.mappings().all()]
+
+    return {**dict(assignment), "questions": questions}
+
+
+@router.post("/lessons/{lesson_id}/assignment")
+async def save_assignment(
+    lesson_id: int,
+    body: AssignmentCreateRequest,
+    admin: dict = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Create or replace the coding assignment + questions for a lesson."""
+    # Delete existing assignment (cascade deletes questions)
+    await db.execute(text("DELETE FROM assignments WHERE lesson_id = :lid"), {"lid": lesson_id})
+
+    now = utc_now()
+    result = await db.execute(text("""
+        INSERT INTO assignments (
+            lesson_id, title, description, instructions, language, total_questions,
+            created_at, updated_at
+        ) VALUES (
+            :lid, :title, :description, :instructions, :language, :total_questions, :now, :now
+        ) RETURNING assignment_id
+    """), {
+        "lid": lesson_id, "title": body.title, "description": body.description,
+        "instructions": body.instructions, "language": body.language,
+        "total_questions": len(body.questions), "now": now,
+    })
+    assignment_id = result.scalar_one()
+
+    for idx, q in enumerate(body.questions):
+        await db.execute(text("""
+            INSERT INTO assignment_questions (
+                assignment_id, title, problem_statement, starter_code, expected_output,
+                sample_input, solution_code, solution_explanation, language, points,
+                order_index, created_at
+            ) VALUES (
+                :aid, :title, :problem_statement, :starter_code, :expected_output,
+                :sample_input, :solution_code, :solution_explanation, :language, :points,
+                :order_index, :now
+            )
+        """), {
+            "aid": assignment_id, "title": q.title,
+            "problem_statement": q.problem_statement, "starter_code": q.starter_code,
+            "expected_output": q.expected_output, "sample_input": q.sample_input,
+            "solution_code": q.solution_code, "solution_explanation": q.solution_explanation,
+            "language": q.language, "points": q.points,
+            "order_index": idx, "now": now,
+        })
+
+    await db.commit()
+    return {"assignment_id": assignment_id, "total_questions": len(body.questions)}
+
+
+# ══════════════════════════════════════════════════════════════════════════
 # PUBLISH
 # ══════════════════════════════════════════════════════════════════════════
 
@@ -614,7 +693,7 @@ async def publish_course(
         for l in lessons:
             has_content = bool(
                 l["content_url"] or l["text_content"] or l["video_external_id"]
-                or l["content_type"] in ("quiz", "flashcard")
+                or l["content_type"] in ("quiz", "flashcard", "assignment")
             )
             if not has_content:
                 errors.append(f"Lesson '{l['title']}' in module '{m['title']}' has no content")

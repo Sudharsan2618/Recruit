@@ -135,6 +135,30 @@ export interface FlashcardItemData {
   order_index?: number | null
 }
 
+export interface AssignmentQuestionData {
+  question_id?: number
+  title?: string | null
+  problem_statement: string
+  starter_code?: string | null
+  expected_output?: string | null
+  sample_input?: string | null
+  solution_code?: string | null
+  solution_explanation?: string | null
+  language: string
+  points: number
+  order_index?: number | null
+}
+
+export interface AssignmentBuilderData {
+  assignment_id?: number
+  title: string
+  description?: string | null
+  instructions?: string | null
+  language: string
+  total_questions: number
+  questions: AssignmentQuestionData[]
+}
+
 // ── Upload ──
 
 export async function requestSignedUpload(
@@ -239,6 +263,16 @@ export async function getFlashcards(lessonId: number): Promise<FlashcardDeckData
 
 export async function saveFlashcards(lessonId: number, data: Record<string, any>): Promise<{ deck_id: number }> {
   return fetchApiWithAuth(`/admin/courses/builder/lessons/${lessonId}/flashcards`, { method: 'POST', body: JSON.stringify(data) })
+}
+
+// ── Assignments (coding exercises) ──
+
+export async function getBuilderAssignment(lessonId: number): Promise<AssignmentBuilderData | null> {
+  return fetchApiWithAuth(`/admin/courses/builder/lessons/${lessonId}/assignment`)
+}
+
+export async function saveAssignment(lessonId: number, data: Record<string, any>): Promise<{ assignment_id: number }> {
+  return fetchApiWithAuth(`/admin/courses/builder/lessons/${lessonId}/assignment`, { method: 'POST', body: JSON.stringify(data) })
 }
 
 // ── Publish ──

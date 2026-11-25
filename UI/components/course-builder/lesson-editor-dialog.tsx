@@ -18,12 +18,14 @@ import { AudioEditor } from "@/components/course-builder/content-editors/audio-e
 import { ImageEditor } from "@/components/course-builder/content-editors/image-editor"
 import { QuizBuilder } from "@/components/course-builder/content-editors/quiz-builder"
 import { FlashcardBuilder } from "@/components/course-builder/content-editors/flashcard-builder"
+import { AssignmentBuilder } from "@/components/course-builder/content-editors/assignment-builder"
 import { ScormEditor } from "@/components/course-builder/content-editors/scorm-editor"
 import { ExternalLinkEditor } from "@/components/course-builder/content-editors/external-link-editor"
 
 import {
-  addLesson, updateLesson, saveQuiz, saveFlashcards,
+  addLesson, updateLesson, saveQuiz, saveFlashcards, saveAssignment,
   type LessonBuilderData, type QuizBuilderData, type FlashcardDeckData,
+  type AssignmentBuilderData,
 } from "@/lib/api/admin-courses"
 
 const CONTENT_TYPES = [
@@ -34,6 +36,7 @@ const CONTENT_TYPES = [
   { value: "image", label: "Image" },
   { value: "quiz", label: "Quiz" },
   { value: "flashcard", label: "Flashcard Deck" },
+  { value: "assignment", label: "Assignment (Coding)" },
   { value: "scorm_package", label: "SCORM Package" },
   { value: "external_link", label: "External Link" },
 ]
@@ -69,6 +72,7 @@ export function LessonEditorDialog({
   // Quiz / Flashcard data (saved separately)
   const [quizData, setQuizData] = useState<Partial<QuizBuilderData>>({})
   const [flashcardData, setFlashcardData] = useState<Partial<FlashcardDeckData>>({})
+  const [assignmentData, setAssignmentData] = useState<Partial<AssignmentBuilderData>>({})
 
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -101,6 +105,7 @@ export function LessonEditorDialog({
       }
       setQuizData({})
       setFlashcardData({})
+      setAssignmentData({})
       setError(null)
     }
   }, [open, lesson])
@@ -147,6 +152,11 @@ export function LessonEditorDialog({
         await saveFlashcards(lessonId, flashcardData)
       }
 
+      // Save assignment if content type is assignment
+      if (contentType === "assignment" && assignmentData.questions?.length) {
+        await saveAssignment(lessonId, assignmentData)
+      }
+
       onSaved()
     } catch (e: any) {
       setError(e.message || "Failed to save lesson")
@@ -183,6 +193,8 @@ export function LessonEditorDialog({
         return <QuizBuilder lessonId={lesson?.lesson_id ?? null} onChange={setQuizData} quizData={quizData} />
       case "flashcard":
         return <FlashcardBuilder lessonId={lesson?.lesson_id ?? null} onChange={setFlashcardData} deckData={flashcardData} />
+      case "assignment":
+        return <AssignmentBuilder lessonId={lesson?.lesson_id ?? null} onChange={setAssignmentData} assignmentData={assignmentData} />
       case "scorm_package":
         return <ScormEditor contentUrl={contentUrl} courseSlug={courseSlug} onChange={setContentUrl} />
       case "external_link":

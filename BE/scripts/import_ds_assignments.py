@@ -351,6 +351,7 @@ def connect():
 
 def ensure_schema(conn):
     """Idempotent: add the enum value + assignment tables if missing (autocommit)."""
+    conn.rollback()  # end any open (read-only) transaction so autocommit can be set
     conn.autocommit = True
     with conn.cursor() as cur:
         cur.execute("ALTER TYPE content_type ADD VALUE IF NOT EXISTS 'assignment'")

@@ -39,10 +39,10 @@ export function VideoEditor({ contentUrl, videoExternalId, videoExternalPlatform
       <TabsContent value="upload" className="mt-3">
         <UploadDropzone
           accept={{ "video/*": [".mp4", ".webm", ".mov"] }}
-          maxSizeMB={500}
+          maxSizeMB={1024}
           onUploadComplete={(url) => onChange({ content_url: url, video_external_id: "", video_external_platform: "" })}
           courseSlug={courseSlug}
-          label="Drop video file (MP4, WebM, MOV — max 500MB)"
+          label="Drop video file (MP4, WebM, MOV — max 1GB)"
           currentUrl={contentUrl}
         />
       </TabsContent>

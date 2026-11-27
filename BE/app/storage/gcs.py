@@ -119,9 +119,13 @@ def delete_blob(blob_name: str):
 def generate_signed_upload_url(
     blob_name: str,
     content_type: str = "application/octet-stream",
-    expiration_minutes: int = 30,
+    expiration_minutes: int = 60,
 ) -> str:
-    """Generate a V4 signed URL for direct browser PUT upload to GCS."""
+    """Generate a V4 signed URL for direct browser PUT upload to GCS.
+
+    Expiry is 60 min so large (up to ~1GB) uploads on slower connections have
+    enough time to finish before the URL expires.
+    """
     client = get_gcs_client()
     bucket = get_bucket(client)
     blob = bucket.blob(blob_name)

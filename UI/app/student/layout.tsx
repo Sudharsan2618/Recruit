@@ -6,6 +6,7 @@ import { usePathname, useRouter } from "next/navigation"
 import { AuthProvider, useAuth } from "@/lib/auth-context"
 import { PortalShell } from "@/components/portal-shell"
 import { DashboardSkeleton } from "@/components/skeletons"
+import { Toaster } from "@/components/ui/sonner"
 import {
   LayoutDashboard,
   BookOpen,
@@ -92,6 +93,7 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
       <AuthGuard>
         <LayoutContent>{children}</LayoutContent>
       </AuthGuard>
+      <Toaster richColors position="top-center" />
     </AuthProvider>
   )
 }

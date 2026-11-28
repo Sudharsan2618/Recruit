@@ -108,6 +108,13 @@ class CourseRepository:
         result = await self.db.execute(query)
         return result.unique().scalars().first()
 
+    async def get_lesson_deck_id(self, lesson_id: int) -> Optional[int]:
+        """Return the flashcard deck_id linked to a lesson, if any."""
+        result = await self.db.execute(
+            select(FlashcardDeck.deck_id).where(FlashcardDeck.lesson_id == lesson_id)
+        )
+        return result.scalars().first()
+
     # ── Quiz ──
 
     async def get_quiz(self, quiz_id: int) -> Optional[Quiz]:

@@ -69,6 +69,7 @@ export interface LessonFull {
   video_external_platform: string | null;
   text_content: string | null;
   quiz_id: number | null;
+  deck_id: number | null;
 }
 
 export interface ModuleOut {

@@ -145,6 +145,10 @@ class CourseService:
         if not lesson:
             return None
 
+        deck_id = None
+        if lesson.content_type.value == "flashcard":
+            deck_id = await self.repo.get_lesson_deck_id(lesson_id)
+
         return LessonOut(
             lesson_id=lesson.lesson_id,
             title=lesson.title,
@@ -159,6 +163,7 @@ class CourseService:
             video_external_platform=lesson.video_external_platform,
             text_content=lesson.text_content,
             quiz_id=lesson.quizzes[0].quiz_id if lesson.quizzes else None,
+            deck_id=deck_id,
         )
 
     # â”€â”€ Quiz â”€â”€

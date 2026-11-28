@@ -99,6 +99,9 @@ class LessonOut(BaseModel):
     # Linked Quiz
     quiz_id: Optional[int] = None
 
+    # Linked Flashcard deck (for content_type == 'flashcard')
+    deck_id: Optional[int] = None
+
 
 class LessonBrief(BaseModel):
     """Lesson summary without content — for curriculum view."""

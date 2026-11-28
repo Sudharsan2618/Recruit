@@ -15,13 +15,15 @@ const CodePlayground = dynamic(() => import("@/components/code-editor/CodePlaygr
   ),
 })
 
-import React, { useState, useEffect, useRef, useCallback } from "react"
+import React, { useState, useEffect, useRef, useCallback, useMemo } from "react"
 import { useSearchParams, useRouter } from "next/navigation"
+import { toast } from "sonner"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import { AssignmentPlayer } from "@/components/student/assignment-player"
+import { FlashcardViewer } from "@/components/student/flashcard-viewer"
 import {
   ArrowLeft,
   BookOpen,
@@ -387,6 +389,60 @@ export default function CoursePlayer() {
   // Tracks lesson IDs for which we've already fired the one-time "lesson_completed" event
   // Prevents duplicate MongoDB analytics when auto-complete triggers repeatedly (e.g. video 20s ticks)
   const completionTrackedRef = useRef<Set<number>>(new Set())
+
+  // ── Sequential module unlock ──────────────────────────────────────────────
+  // Rule: Module 1 is always unlocked. Every later module stays LOCKED until
+  // every module before it is complete. A module is "complete" when all of its
+  // lessons are completed; a module with no lessons counts as complete so it can
+  // never permanently block the rest of the course. This is derived purely from
+  // `completedLessons`, so a returning student always sees the correct unlocked
+  // set — no stored flag, no migration, and it re-computes the instant a lesson
+  // is marked complete.
+  const unlockedModuleIds = useMemo(() => {
+    const unlocked = new Set<number>()
+    if (!course) return unlocked
+    let allPreviousComplete = true
+    for (const mod of course.modules) {
+      if (allPreviousComplete) unlocked.add(mod.module_id)
+      const moduleComplete =
+        mod.lessons.length === 0 ||
+        mod.lessons.every((l) => completedLessons.has(l.lesson_id))
+      allPreviousComplete = allPreviousComplete && moduleComplete
+    }
+    return unlocked
+  }, [course, completedLessons])
+
+  const isModuleLocked = useCallback(
+    (moduleId: number) => !!course && !unlockedModuleIds.has(moduleId),
+    [course, unlockedModuleIds],
+  )
+
+  // Announce + auto-reveal a module the moment it unlocks by finishing the
+  // previous one. The first derivation (page load) only seeds the baseline, so
+  // we never toast for modules that were already unlocked when the student
+  // arrived.
+  const prevUnlockedRef = useRef<Set<number> | null>(null)
+  useEffect(() => {
+    if (!course) return
+    const prev = prevUnlockedRef.current
+    if (prev) {
+      const newlyUnlocked = course.modules.filter(
+        (m) => unlockedModuleIds.has(m.module_id) && !prev.has(m.module_id),
+      )
+      if (newlyUnlocked.length > 0) {
+        const justOpened = newlyUnlocked[newlyUnlocked.length - 1]
+        toast.success(`Module unlocked: ${justOpened.title}`, {
+          description: "You've completed the previous module — keep going!",
+        })
+        setExpandedModules((prevExpanded) =>
+          prevExpanded.includes(justOpened.module_id)
+            ? prevExpanded
+            : [...prevExpanded, justOpened.module_id],
+        )
+      }
+    }
+    prevUnlockedRef.current = unlockedModuleIds
+  }, [unlockedModuleIds, course])
 
   // Code Playground State
   const [codePlaygroundOpen, setCodePlaygroundOpen] = useState(false)
@@ -1046,12 +1102,27 @@ export default function CoursePlayer() {
   }
 
   function toggleModule(id: number) {
+    if (isModuleLocked(id)) {
+      toast.info("This module is locked", {
+        description: "Complete the previous module to unlock it.",
+      })
+      return
+    }
     setExpandedModules((prev) =>
       prev.includes(id) ? prev.filter((m) => m !== id) : [...prev, id]
     )
   }
 
   function handleLessonClick(lesson: LessonBrief) {
+    const parentModule = course?.modules.find((m) =>
+      m.lessons.some((l) => l.lesson_id === lesson.lesson_id)
+    )
+    if (parentModule && isModuleLocked(parentModule.module_id)) {
+      toast.info("This lesson is locked", {
+        description: "Complete the previous module to unlock it.",
+      })
+      return
+    }
     loadLesson(lesson.lesson_id)
     if (typeof window !== "undefined" && window.innerWidth < 1024) {
       setSidebarOpen(false)
@@ -1078,10 +1149,18 @@ export default function CoursePlayer() {
     const currentIndex = allLessons.findIndex((l) => l.lesson_id === currentLesson.lesson_id)
     if (currentIndex >= 0 && currentIndex < allLessons.length - 1) {
       const next = allLessons[currentIndex + 1]
-      loadLesson(next.lesson_id)
       const nextMod = course.modules.find((m) =>
         m.lessons.some((l) => l.lesson_id === next.lesson_id)
       )
+      // The next lesson may sit in a still-locked module (current module not yet
+      // fully complete). Block the jump instead of loading locked content.
+      if (nextMod && isModuleLocked(nextMod.module_id)) {
+        toast.info("Next module is locked", {
+          description: "Complete every lesson in this module to unlock the next one.",
+        })
+        return
+      }
+      loadLesson(next.lesson_id)
       if (nextMod && !expandedModules.includes(nextMod.module_id)) {
         setExpandedModules((prev) => [...prev, nextMod.module_id])
       }
@@ -1683,8 +1762,29 @@ export default function CoursePlayer() {
                     <AssignmentPlayer lessonId={currentLesson.lesson_id} />
                   )}
 
+                  {/* Flashcards */}
+                  {currentLesson?.content_type === "flashcard" && (
+                    currentLesson.deck_id != null ? (
+                      <FlashcardViewer
+                        deckId={currentLesson.deck_id}
+                        onAllViewed={() => {
+                          if (currentLesson && !completedLessons.has(currentLesson.lesson_id)) {
+                            markLessonCompleted(currentLesson.lesson_id)
+                          }
+                        }}
+                      />
+                    ) : (
+                      <div className="flex-1 flex flex-col items-center justify-center bg-muted/30 p-12 text-center min-h-[400px]">
+                        <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-primary/10 border border-primary/20 mb-4">
+                          <BookOpen className="h-7 w-7 text-primary" />
+                        </div>
+                        <p className="text-sm text-muted-foreground">No flashcards have been added to this lesson yet.</p>
+                      </div>
+                    )
+                  )}
+
                   {/* Fallback / No content placeholder */}
-                  {(!currentLesson || (currentLesson.content_type !== "video" && currentLesson.content_type !== "quiz" && currentLesson.content_type !== "assignment" && currentLesson.content_type !== "pdf" && currentLesson.content_type !== "text" && !((currentLesson.content_type === "image" || currentLesson.content_type === "audio") && currentLesson.content_url))) && (
+                  {(!currentLesson || (currentLesson.content_type !== "video" && currentLesson.content_type !== "quiz" && currentLesson.content_type !== "assignment" && currentLesson.content_type !== "flashcard" && currentLesson.content_type !== "pdf" && currentLesson.content_type !== "text" && !((currentLesson.content_type === "image" || currentLesson.content_type === "audio") && currentLesson.content_url))) && (
                     <div className="flex-1 flex flex-col items-center justify-center bg-muted/30 p-12 text-center min-h-[400px]">
                       <div className="mb-6">
                         <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-primary/10 border border-primary/20 mx-auto">
@@ -1975,32 +2075,42 @@ export default function CoursePlayer() {
               {course.modules.map((mod, modIdx) => {
                 const moduleLessons = mod.lessons
                 const moduleCompletedCount = moduleLessons.filter(l => completedLessons.has(l.lesson_id)).length
-                const isModuleExpanded = expandedModules.includes(mod.module_id)
+                const locked = isModuleLocked(mod.module_id)
+                const isModuleExpanded = expandedModules.includes(mod.module_id) && !locked
                 const hasActiveLesson = moduleLessons.some(l => currentLesson?.lesson_id === l.lesson_id)
-                
+
                 return (
-                  <div 
-                    key={mod.module_id} 
+                  <div
+                    key={mod.module_id}
                     className={cn(
                       "rounded-xl overflow-hidden transition-all duration-200",
-                      isModuleExpanded 
-                        ? "bg-muted/30 dark:bg-sidebar/40" 
-                        : "hover:bg-muted/20"
+                      locked
+                        ? "opacity-60"
+                        : isModuleExpanded
+                          ? "bg-muted/30 dark:bg-sidebar/40"
+                          : "hover:bg-muted/20"
                     )}
                   >
                     {/* Module Header */}
                     <button
                       onClick={() => toggleModule(mod.module_id)}
-                      className="flex w-full items-center gap-3 rounded-lg px-3.5 py-3 text-left transition-all duration-200 group/module focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+                      aria-disabled={locked}
+                      title={locked ? "Complete the previous module to unlock" : undefined}
+                      className={cn(
+                        "flex w-full items-center gap-3 rounded-lg px-3.5 py-3 text-left transition-all duration-200 group/module focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset",
+                        locked && "cursor-not-allowed",
+                      )}
                     >
-                      {/* Module Number Badge */}
+                      {/* Module Number Badge (or lock when gated) */}
                       <div className={cn(
                         "h-9 w-9 rounded-lg flex items-center justify-center text-xs font-bold shrink-0 transition-all duration-200",
-                        hasActiveLesson || isModuleExpanded
-                          ? "bg-primary text-primary-foreground"
-                          : "bg-muted/60 dark:bg-sidebar-accent text-muted-foreground group-hover/module:bg-primary/10 group-hover/module:text-primary"
+                        locked
+                          ? "bg-muted/60 dark:bg-sidebar-accent text-muted-foreground"
+                          : hasActiveLesson || isModuleExpanded
+                            ? "bg-primary text-primary-foreground"
+                            : "bg-muted/60 dark:bg-sidebar-accent text-muted-foreground group-hover/module:bg-primary/10 group-hover/module:text-primary"
                       )}>
-                        {modIdx + 1}
+                        {locked ? <Lock className="h-4 w-4" /> : modIdx + 1}
                       </div>
 
                       {/* Module Info */}
@@ -2025,17 +2135,26 @@ export default function CoursePlayer() {
                         </div>
                       </div>
 
-                      {/* Progress fraction + Expand toggle */}
+                      {/* Progress fraction + Expand toggle (or Locked badge) */}
                       <div className="flex items-center gap-2 shrink-0">
-                        {moduleCompletedCount > 0 && (
-                          <span className="text-[10px] font-semibold text-success tabular-nums">
-                            {moduleCompletedCount}/{moduleLessons.length}
+                        {locked ? (
+                          <span className="flex items-center gap-1 text-[10px] font-semibold text-muted-foreground">
+                            <Lock className="h-3 w-3" />
+                            Locked
                           </span>
+                        ) : (
+                          <>
+                            {moduleCompletedCount > 0 && (
+                              <span className="text-[10px] font-semibold text-success tabular-nums">
+                                {moduleCompletedCount}/{moduleLessons.length}
+                              </span>
+                            )}
+                            <ChevronDown className={cn(
+                              "h-3.5 w-3.5 text-muted-foreground/50 transition-transform duration-200",
+                              isModuleExpanded && "rotate-180 text-primary"
+                            )} />
+                          </>
                         )}
-                        <ChevronDown className={cn(
-                          "h-3.5 w-3.5 text-muted-foreground/50 transition-transform duration-200",
-                          isModuleExpanded && "rotate-180 text-primary"
-                        )} />
                       </div>
                     </button>
                     
